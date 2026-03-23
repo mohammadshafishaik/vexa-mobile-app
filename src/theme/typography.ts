@@ -1,14 +1,15 @@
-import { TextStyle } from 'react-native';
+import { TextStyle, Platform } from 'react-native';
 
-// Typography scale — Inter font family
-// Sizes follow a modular scale for visual harmony
+// Typography scale — System fonts (safe fallback)
+// Uses system defaults until Inter is properly linked
+// On iOS: San Francisco; On Android: Roboto
 
 export const fontFamilies = {
-  regular: 'Inter',
-  medium: 'Inter-Medium',
-  semibold: 'Inter-SemiBold',
-  bold: 'Inter-Bold',
-  light: 'Inter-Light',
+  regular: Platform.select({ ios: 'System', android: 'Roboto' }) as string,
+  medium: Platform.select({ ios: 'System', android: 'Roboto' }) as string,
+  semibold: Platform.select({ ios: 'System', android: 'Roboto' }) as string,
+  bold: Platform.select({ ios: 'System', android: 'Roboto' }) as string,
+  light: Platform.select({ ios: 'System', android: 'Roboto' }) as string,
 } as const;
 
 export const fontSizes = {

@@ -1,9 +1,11 @@
 import { io, Socket } from 'socket.io-client';
+import { Platform } from 'react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { SOCKET_EVENTS } from '../utils/constants';
 
-// Socket URL will be configured via environment variable in Phase 4
-const SOCKET_URL = 'http://localhost:3000';
+// Use 10.0.2.2 for Android emulator, localhost for iOS simulator
+const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+const SOCKET_URL = `http://${HOST}:3000`;
 
 let socket: Socket | null = null;
 

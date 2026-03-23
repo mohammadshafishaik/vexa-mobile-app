@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Home, Bell, User, Plus, ChevronLeft } from 'lucide-react-native';
+import { Home, Bell, User } from 'lucide-react-native';
 import { CustomerTabParamList, CustomerStackParamList } from '../types';
 import { colors } from '../theme/colors';
 import { fontFamilies } from '../theme/typography';
@@ -22,8 +22,8 @@ import ProfileScreen from '../screens/ProfileScreen';
 const Tab = createBottomTabNavigator<CustomerTabParamList>();
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
 
-// Stack navigator for screens accessible from dashboard
-const CustomerStackNavigator: React.FC = () => {
+// Dashboard tab wraps the dashboard in a stack with sub-screens
+const DashboardStack: React.FC = () => {
   return (
     <Stack.Navigator
       screenOptions={{
@@ -32,6 +32,7 @@ const CustomerStackNavigator: React.FC = () => {
         contentStyle: { backgroundColor: colors.black },
       }}
     >
+      <Stack.Screen name="DashboardHome" component={CustomerDashboardScreen} />
       <Stack.Screen name="PostJob" component={PostJobScreen} />
       <Stack.Screen name="LiveBidding" component={LiveBiddingScreen} />
       <Stack.Screen name="JobDetail" component={JobDetailScreen} />
@@ -57,7 +58,7 @@ const CustomerTabs: React.FC = () => {
     >
       <Tab.Screen
         name="Dashboard"
-        component={CustomerDashboardScreen}
+        component={DashboardStack}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Home size={size} color={color} strokeWidth={1.5} />
@@ -128,5 +129,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export { CustomerStackNavigator };
 export default CustomerTabs;

@@ -18,8 +18,8 @@ import ProfileScreen from '../screens/ProfileScreen';
 const Tab = createBottomTabNavigator<ProviderTabParamList>();
 const Stack = createNativeStackNavigator<ProviderStackParamList>();
 
-// Stack navigator for provider-specific screens
-const ProviderStackNavigator: React.FC = () => {
+// Dashboard tab wraps the dashboard in a stack with sub-screens
+const DashboardStack: React.FC = () => {
   return (
     <Stack.Navigator
       screenOptions={{
@@ -28,6 +28,7 @@ const ProviderStackNavigator: React.FC = () => {
         contentStyle: { backgroundColor: colors.black },
       }}
     >
+      <Stack.Screen name="DashboardHome" component={ProviderDashboardScreen} />
       <Stack.Screen name="JobDetail" component={JobDetailScreen} />
       <Stack.Screen
         name="ModificationRequest"
@@ -52,7 +53,7 @@ const ProviderTabs: React.FC = () => {
     >
       <Tab.Screen
         name="Dashboard"
-        component={ProviderDashboardScreen}
+        component={DashboardStack}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Home size={size} color={color} strokeWidth={1.5} />
@@ -123,5 +124,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export { ProviderStackNavigator };
 export default ProviderTabs;

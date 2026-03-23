@@ -8,8 +8,8 @@ import { UserRole } from '../types';
 
 // Stacks
 import AuthStack from './AuthStack';
-import CustomerTabs, { CustomerStackNavigator } from './CustomerTabs';
-import ProviderTabs, { ProviderStackNavigator } from './ProviderTabs';
+import CustomerTabs from './CustomerTabs';
+import ProviderTabs from './ProviderTabs';
 import SplashScreen from '../screens/SplashScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

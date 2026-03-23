@@ -1,8 +1,10 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from 'axios';
+import { Platform } from 'react-native';
 import { useAuthStore } from '../store/useAuthStore';
 
-// Base URL will be configured via environment variable in Phase 3
-const BASE_URL = 'http://localhost:3000/api';
+// Use 10.0.2.2 for Android emulator, localhost for iOS simulator
+const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+const BASE_URL = `http://${HOST}:3000/api`;
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,

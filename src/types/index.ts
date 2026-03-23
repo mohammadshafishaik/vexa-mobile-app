@@ -250,6 +250,7 @@ export type CustomerTabParamList = {
 };
 
 export type CustomerStackParamList = {
+  DashboardHome: undefined;
   PostJob: undefined;
   LiveBidding: { jobId: string };
   JobDetail: { jobId: string };
@@ -265,6 +266,7 @@ export type ProviderTabParamList = {
 };
 
 export type ProviderStackParamList = {
+  DashboardHome: undefined;
   JobDetail: { jobId: string };
   ModificationRequest: { jobId: string };
 };

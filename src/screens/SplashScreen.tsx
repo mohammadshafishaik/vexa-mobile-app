@@ -13,7 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors } from '../theme/colors';
 import { fontFamilies, fontSizes } from '../theme/typography';
-import { RootStackParamList } from '../types';
+import { RootStackParamList, UserRole } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
 import { ANIMATION } from '../utils/constants';
 
@@ -22,6 +22,7 @@ type SplashNav = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
 const SplashScreen: React.FC = () => {
   const navigation = useNavigation<SplashNav>();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
 
   // Animation values
   const logoOpacity = useSharedValue(0);
@@ -32,7 +33,8 @@ const SplashScreen: React.FC = () => {
 
   const navigateAway = () => {
     if (isAuthenticated) {
-      navigation.reset({ index: 0, routes: [{ name: 'CustomerMain' }] });
+      const route = user?.role === UserRole.PROVIDER ? 'ProviderMain' : 'CustomerMain';
+      navigation.reset({ index: 0, routes: [{ name: route }] });
     } else {
       navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
     }
