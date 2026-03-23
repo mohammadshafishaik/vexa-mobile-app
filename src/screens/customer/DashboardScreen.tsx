@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,10 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Plus, MapPin, Clock, ChevronRight } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
@@ -20,18 +21,42 @@ import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
 import { useAuthStore } from '../../store/useAuthStore';
-import { ServiceRequest, JobStatus } from '../../types';
+import { ServiceRequest } from '../../types';
 import { formatCurrency, formatRelativeTime, truncateText } from '../../utils/helpers';
+import api from '../../services/api';
 
 const CustomerDashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
   const jobs = useJobStore((s) => s.jobs);
+  const setJobs = useJobStore((s) => s.setJobs);
   const setSelectedJob = useJobStore((s) => s.setSelectedJob);
   const isLoading = useJobStore((s) => s.isLoading);
+  const setLoading = useJobStore((s) => s.setLoading);
+
+  const fetchJobs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/jobs');
+      if (res.data.success) {
+        setJobs(res.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch jobs:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [setJobs, setLoading]);
+
+  // Fetch jobs when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobs();
+    }, [fetchJobs])
+  );
 
   const handleRefresh = () => {
-    // Will fetch from API in Phase 3
+    fetchJobs();
   };
 
   const handlePostJob = () => {
@@ -152,7 +177,7 @@ const CustomerDashboardScreen: React.FC = () => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={renderEmptyState}
+        ListEmptyComponent={isLoading ? <ActivityIndicator color={colors.white} style={{ marginTop: 40 }} /> : renderEmptyState()}
         refreshControl={
           <RefreshControl
             refreshing={isLoading}

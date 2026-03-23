@@ -40,14 +40,18 @@ export const SOCKET_EVENTS = {
   DISCONNECT: 'disconnect',
   ERROR: 'error',
 
+  // User
+  USER_JOIN: 'user:join',
+
   // Bidding
   JOIN_BIDDING_ROOM: 'bidding:join',
   LEAVE_BIDDING_ROOM: 'bidding:leave',
-  NEW_BID: 'bidding:new',
-  BID_UPDATE: 'bidding:update',
+  NEW_BID: 'bid:new',
+  BID_UPDATE: 'job:bidUpdate',
   BIDDING_CLOSED: 'bidding:closed',
 
   // Job updates
+  JOB_NEW: 'job:new',
   JOB_STATUS_CHANGE: 'job:statusChange',
   MODIFICATION_SUBMITTED: 'job:modificationSubmitted',
   MODIFICATION_RESPONDED: 'job:modificationResponded',

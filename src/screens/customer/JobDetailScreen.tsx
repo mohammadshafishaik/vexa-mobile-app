@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -26,8 +27,9 @@ import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
-import { JobStatus, CustomerStackParamList } from '../../types';
+import { JobStatus, CustomerStackParamList, ServiceRequest } from '../../types';
 import { formatCurrency, formatRelativeTime } from '../../utils/helpers';
+import api from '../../services/api';
 
 type JobDetailRoute = RouteProp<CustomerStackParamList, 'JobDetail'>;
 
@@ -35,9 +37,26 @@ const JobDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<JobDetailRoute>();
   const { jobId } = route.params;
-  const selectedJob = useJobStore((s) => s.selectedJob);
+  const setSelectedJob = useJobStore((s) => s.setSelectedJob);
+  const [job, setJob] = useState<ServiceRequest | null>(useJobStore.getState().selectedJob);
+  const [loading, setLoading] = useState(!job);
 
-  const job = selectedJob;
+  useEffect(() => {
+    const fetchJob = async () => {
+      try {
+        const res = await api.get(`/jobs/${jobId}`);
+        if (res.data.success) {
+          setJob(res.data.data);
+          setSelectedJob(res.data.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch job:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchJob();
+  }, [jobId]);
 
   const handleViewBids = () => {
     navigation.navigate('LiveBidding', { jobId });
@@ -59,6 +78,14 @@ const JobDetailScreen: React.FC = () => {
       });
     }
   };
+
+  if (loading) {
+    return (
+      <ScreenContainer>
+        <ActivityIndicator color={colors.white} style={{ flex: 1 }} />
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer>
@@ -129,6 +156,25 @@ const JobDetailScreen: React.FC = () => {
           </GlassCard>
         </Animated.View>
 
+        {/* Bids Summary */}
+        {job?.bids && job.bids.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+            <Text style={styles.sectionTitle}>Bids ({job.bids.length})</Text>
+            <GlassCard style={styles.providerCard}>
+              {job.bids.slice(0, 3).map((bid: any) => (
+                <View key={bid.id} style={styles.bidRow}>
+                  <Avatar name={bid.provider?.name ?? 'Provider'} size="sm" />
+                  <View style={{ flex: 1, marginLeft: spacing[3] }}>
+                    <Text style={styles.providerName}>{bid.provider?.name}</Text>
+                    <Text style={styles.providerMeta}>{bid.message}</Text>
+                  </View>
+                  <Text style={styles.priceValue}>{formatCurrency(bid.amount)}</Text>
+                </View>
+              ))}
+            </GlassCard>
+          </Animated.View>
+        )}
+
         {/* Provider Info */}
         {job?.selectedProvider && (
           <Animated.View entering={FadeInDown.delay(300).duration(400)}>
@@ -160,7 +206,7 @@ const JobDetailScreen: React.FC = () => {
         >
           {job?.status === JobStatus.BIDDING && (
             <Button
-              title="View Live Bids"
+              title={`View Live Bids${job.bids ? ` (${job.bids.length})` : ''}`}
               onPress={handleViewBids}
               variant="primary"
               size="lg"
@@ -286,6 +332,13 @@ const styles = StyleSheet.create({
   providerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  bidRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.glassBorder,
   },
   providerInfo: {
     marginLeft: spacing[4],

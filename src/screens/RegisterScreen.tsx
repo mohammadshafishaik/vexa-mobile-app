@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
@@ -18,41 +19,59 @@ import { fontFamilies, fontSizes, typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
 import { UserRole } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
-import { seedMockData } from '../utils/seedData';
+import api from '../services/api';
 
 const RegisterScreen: React.FC = () => {
   const navigation = useNavigation();
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const login = useAuthStore((s) => s.login);
 
-  const handleComplete = () => {
-    if (!selectedRole || !name.trim()) return;
+  const handleComplete = async () => {
+    if (!selectedRole || !name.trim() || !password.trim()) return;
 
-    // Mock user for Phase 1 — will be replaced by real auth in Phase 5
-    const mockUser = {
-      id: 'user_001',
-      name: name.trim(),
-      email: `${name.trim().toLowerCase().replace(/\s/g, '.')}@vexa.app`,
-      role: selectedRole,
-      phone: phone || null,
-      avatarUrl: null,
-      isVerified: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    setIsSubmitting(true);
+    try {
+      const email = `${name.trim().toLowerCase().replace(/\s+/g, '.')}@vexa.app`;
 
-    const mockTokens = {
-      accessToken: 'mock_access_token_phase1',
-      refreshToken: 'mock_refresh_token_phase1',
-    };
+      const response = await api.post('/auth/register', {
+        email,
+        name: name.trim(),
+        phone: phone || null,
+        role: selectedRole,
+        password: password.trim(),
+      });
 
-    // Seed stores with sample data so screens aren't empty
-    seedMockData(selectedRole);
-
-    // Set auth state — this triggers navigation to the appropriate dashboard
-    login(mockUser, mockTokens);
+      if (response.data.success) {
+        const { user, tokens } = response.data.data;
+        login(user, tokens);
+      } else {
+        Alert.alert('Registration Failed', response.data.message || 'Please try again');
+      }
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || error.message || 'Registration failed';
+      // If user already exists, try logging in
+      if (msg === 'User already exists') {
+        try {
+          const email = `${name.trim().toLowerCase().replace(/\s+/g, '.')}@vexa.app`;
+          const loginRes = await api.post('/auth/login', { email, password: password.trim() });
+          if (loginRes.data.success) {
+            const { user, tokens } = loginRes.data.data;
+            login(user, tokens);
+            return;
+          }
+        } catch (loginErr: any) {
+          Alert.alert('Login Failed', loginErr?.response?.data?.message || 'Invalid credentials');
+        }
+      } else {
+        Alert.alert('Error', msg);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -159,6 +178,13 @@ const RegisterScreen: React.FC = () => {
             onChangeText={setName}
           />
           <Input
+            label="Password"
+            placeholder="Create a password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          <Input
             label="Phone (optional)"
             placeholder="+91 XXXXX XXXXX"
             value={phone}
@@ -178,7 +204,8 @@ const RegisterScreen: React.FC = () => {
             variant="primary"
             size="lg"
             fullWidth
-            disabled={!selectedRole || !name.trim()}
+            loading={isSubmitting}
+            disabled={!selectedRole || !name.trim() || !password.trim()}
           />
         </Animated.View>
       </ScrollView>

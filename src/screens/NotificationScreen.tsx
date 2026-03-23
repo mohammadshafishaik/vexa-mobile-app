@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { Bell, Check, CheckCheck } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import ScreenContainer from '../components/layout/ScreenContainer';
 import GlassCard from '../components/ui/GlassCard';
 import Button from '../components/ui/Button';
@@ -17,6 +20,7 @@ import { spacing, borderRadius } from '../theme/spacing';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { Notification, NotificationType } from '../types';
 import { formatRelativeTime } from '../utils/helpers';
+import api from '../services/api';
 
 const getNotificationIcon = (type: NotificationType) => {
   const iconColors: Partial<Record<NotificationType, string>> = {
@@ -32,15 +36,50 @@ const getNotificationIcon = (type: NotificationType) => {
 const NotificationScreen: React.FC = () => {
   const notifications = useNotificationStore((s) => s.notifications);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const setNotifications = useNotificationStore((s) => s.setNotifications);
+  const isLoading = useNotificationStore((s) => s.isLoading);
+  const setLoading = useNotificationStore((s) => s.setLoading);
   const markAsRead = useNotificationStore((s) => s.markAsRead);
   const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
 
-  const handleNotificationPress = (notification: Notification) => {
+  const fetchNotifications = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/notifications');
+      if (res.data.success) {
+        setNotifications(res.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [setNotifications, setLoading]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchNotifications();
+    }, [fetchNotifications])
+  );
+
+  const handleNotificationPress = async (notification: Notification) => {
     if (!notification.isRead) {
       markAsRead(notification.id);
+      try {
+        await api.patch('/notifications/read', { ids: [notification.id] });
+      } catch (error) {
+        console.error('Failed to mark as read:', error);
+      }
     }
-    // Navigate to relevant screen based on notification type
-    // Will be connected in Phase 3
+  };
+
+  const handleMarkAllAsRead = async () => {
+    markAllAsRead();
+    try {
+      await api.patch('/notifications/read', {});
+    } catch (error) {
+      console.error('Failed to mark all as read:', error);
+    }
   };
 
   const renderNotification = ({
@@ -93,7 +132,7 @@ const NotificationScreen: React.FC = () => {
       <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
         <Text style={styles.headerTitle}>Notifications</Text>
         {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllAsRead}>
+          <TouchableOpacity onPress={handleMarkAllAsRead}>
             <View style={styles.markAllButton}>
               <CheckCheck size={16} color={colors.gray400} />
               <Text style={styles.markAllText}>Mark all read</Text>
@@ -108,16 +147,27 @@ const NotificationScreen: React.FC = () => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={fetchNotifications}
+            tintColor={colors.white}
+          />
+        }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconBox}>
-              <Bell size={32} color={colors.gray500} />
+          isLoading ? (
+            <ActivityIndicator color={colors.white} style={{ marginTop: 60 }} />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconBox}>
+                <Bell size={32} color={colors.gray500} />
+              </View>
+              <Text style={styles.emptyTitle}>No notifications</Text>
+              <Text style={styles.emptySubtitle}>
+                You'll be notified about bids, payments, and job updates
+              </Text>
             </View>
-            <Text style={styles.emptyTitle}>No notifications</Text>
-            <Text style={styles.emptySubtitle}>
-              You'll be notified about bids, payments, and job updates
-            </Text>
-          </View>
+          )
         }
       />
     </ScreenContainer>

@@ -8,6 +8,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
@@ -26,6 +27,8 @@ import GlassCard from '../../components/ui/GlassCard';
 import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
+import { useJobStore } from '../../store/useJobStore';
+import api from '../../services/api';
 
 const CATEGORIES = [
   'Plumbing',
@@ -41,6 +44,7 @@ const CATEGORIES = [
 
 const PostJobScreen: React.FC = () => {
   const navigation = useNavigation();
+  const addJob = useJobStore((s) => s.addJob);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -54,8 +58,27 @@ const PostJobScreen: React.FC = () => {
       return;
     }
     setIsSubmitting(true);
-    // Will connect to API in Phase 3
-    setTimeout(() => setIsSubmitting(false), 1500);
+    try {
+      const res = await api.post('/jobs', {
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        location: location.trim(),
+        originalPrice: Number(price),
+      });
+
+      if (res.data.success) {
+        addJob(res.data.data);
+        Alert.alert('Success', 'Job posted successfully!', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Failed to post job';
+      Alert.alert('Error', msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
