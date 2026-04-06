@@ -1,0 +1,15 @@
+
+> com.vexa.app@0.0.1 ios
+> react-native run-ios
+
+error Command failed with exit code 1: xcodebuild -list -json
+xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance.
+Error: Command failed with exit code 1: xcodebuild -list -json
+xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance
+    at makeError (/Users/shaikshafi/Documents/software project/vexa/node_modules/execa/lib/error.js:60:11)
+    at module.exports.sync (/Users/shaikshafi/Documents/software project/vexa/node_modules/execa/index.js:194:17)
+    at getInfo (/Users/shaikshafi/Documents/software project/vexa/node_modules/@react-native-community/cli-platform-apple/build/tools/getInfo.js:62:41)
+    at getConfiguration (/Users/shaikshafi/Documents/software project/vexa/node_modules/@react-native-community/cli-platform-apple/build/commands/buildCommand/getConfiguration.js:36:37)
+    at Object.func (/Users/shaikshafi/Documents/software project/vexa/node_modules/@react-native-community/cli-platform-apple/build/commands/runCommand/createRun.js:126:52)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Command.handleAction (/Users/shaikshafi/Documents/software project/vexa/node_modules/@react-native-community/cli/build/index.js:139:9)

@@ -1,0 +1,303 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import {
+  ChevronRight,
+  LogOut,
+  User as UserIcon,
+  Shield,
+  Bell,
+  HelpCircle,
+  FileText,
+  Key,
+} from 'lucide-react-native';
+import ScreenContainer from '../components/layout/ScreenContainer';
+import GlassCard from '../components/ui/GlassCard';
+import Avatar from '../components/ui/Avatar';
+import Badge from '../components/ui/Badge';
+import { colors } from '../theme/colors';
+import { fontFamilies, fontSizes, typography } from '../theme/typography';
+import { spacing, borderRadius } from '../theme/spacing';
+import { useAuthStore } from '../store/useAuthStore';
+import { socketService } from '../services/socket';
+import api from '../services/api';
+
+const ProfileScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
+  const [stats, setStats] = useState({
+    jobCount: 0,
+    avgRating: 0,
+    reviewCount: 0,
+  });
+
+  // Fetch stats on focus
+  useFocusEffect(
+    useCallback(() => {
+      const fetchStats = async () => {
+        try {
+          const res = await api.get('/custom-auth/stats');
+          if (res.data.success) {
+            setStats(res.data.data);
+          }
+        } catch (error) {
+          console.warn('Failed to fetch stats:', error);
+        }
+      };
+      fetchStats();
+    }, [])
+  );
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: () => {
+            socketService.disconnect();
+            logout();
+          },
+        },
+      ]
+    );
+  };
+
+  const menuItems = [
+    {
+      icon: <UserIcon size={20} color={colors.gray400} />,
+      label: 'Edit Profile',
+      onPress: () => navigation.navigate('EditProfile'),
+    },
+    {
+      icon: <Key size={20} color={colors.gray400} />,
+      label: 'Change Password',
+      onPress: () => navigation.navigate('ChangePassword'),
+    },
+    {
+      icon: <Bell size={20} color={colors.gray400} />,
+      label: 'Notification Settings',
+      onPress: () => {
+        Alert.alert('Coming Soon', 'Notification settings will be available in the next update.');
+      },
+    },
+    {
+      icon: <Shield size={20} color={colors.gray400} />,
+      label: 'Privacy & Security',
+      onPress: () => {
+        Alert.alert('Coming Soon', 'Privacy settings will be available in the next update.');
+      },
+    },
+    {
+      icon: <FileText size={20} color={colors.gray400} />,
+      label: 'Terms of Service',
+      onPress: () => {
+        Alert.alert('Terms of Service', 'VEXA Terms of Service v1.0\n\nBy using VEXA, you agree to our terms and conditions. Full terms will be available on our website.');
+      },
+    },
+    {
+      icon: <HelpCircle size={20} color={colors.gray400} />,
+      label: 'Help & Support',
+      onPress: () => {
+        Alert.alert('Help & Support', 'Need help? Contact us at:\n\nsupport@vexa.app');
+      },
+    },
+  ];
+
+  return (
+    <ScreenContainer>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile Header */}
+        <Animated.View
+          entering={FadeInDown.delay(100).duration(400)}
+          style={styles.profileHeader}
+        >
+          <Avatar
+            name={user?.name ?? 'User'}
+            imageUrl={user?.avatarUrl}
+            size="xl"
+          />
+          <Text style={styles.userName}>{user?.name ?? 'VEXA User'}</Text>
+          <Text style={styles.userEmail}>{user?.email ?? 'user@vexa.app'}</Text>
+          <Badge
+            label={user?.role ?? 'CUSTOMER'}
+            color={colors.white}
+            variant="outlined"
+            size="md"
+            style={{ marginTop: spacing[2] }}
+          />
+        </Animated.View>
+
+        {/* Stats Card */}
+        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+          <GlassCard style={styles.statsCard}>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{stats.jobCount}</Text>
+                <Text style={styles.statLabel}>Jobs</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>
+                  {stats.avgRating > 0 ? stats.avgRating.toFixed(1) : '—'}
+                </Text>
+                <Text style={styles.statLabel}>Rating</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{stats.reviewCount}</Text>
+                <Text style={styles.statLabel}>Reviews</Text>
+              </View>
+            </View>
+          </GlassCard>
+        </Animated.View>
+
+        {/* Menu Items */}
+        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+          <View style={styles.menuSection}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.menuItem,
+                  index === menuItems.length - 1 && styles.menuItemLast,
+                ]}
+                onPress={item.onPress}
+                activeOpacity={0.7}
+              >
+                {item.icon}
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                <ChevronRight size={18} color={colors.gray600} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Animated.View>
+
+        {/* Logout */}
+        <Animated.View entering={FadeInDown.delay(400).duration(400)}>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+            activeOpacity={0.7}
+          >
+            <LogOut size={20} color={colors.error} />
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* App Version */}
+        <Text style={styles.version}>VEXA v1.0.0</Text>
+      </ScrollView>
+    </ScreenContainer>
+  );
+};
+
+const styles = StyleSheet.create({
+  scrollContent: {
+    paddingBottom: spacing[10],
+  },
+  profileHeader: {
+    alignItems: 'center',
+    paddingVertical: spacing[6],
+  },
+  userName: {
+    fontFamily: fontFamilies.bold,
+    fontSize: fontSizes.xl,
+    color: colors.white,
+    marginTop: spacing[3],
+  },
+  userEmail: {
+    ...typography.bodySm,
+    color: colors.gray500,
+    marginTop: spacing[1],
+  },
+  statsCard: {
+    marginBottom: spacing[5],
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontFamily: fontFamilies.bold,
+    fontSize: fontSizes.xl,
+    color: colors.white,
+    marginBottom: 4,
+  },
+  statLabel: {
+    ...typography.caption,
+    color: colors.gray500,
+    textTransform: 'uppercase',
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: colors.glassBorder,
+  },
+  menuSection: {
+    backgroundColor: colors.gray900,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    marginBottom: spacing[5],
+    overflow: 'hidden',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing[4],
+    paddingHorizontal: spacing[4],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.glassBorder,
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
+  menuLabel: {
+    fontFamily: fontFamilies.medium,
+    fontSize: fontSizes.base,
+    color: colors.white,
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing[4],
+    gap: spacing[2],
+  },
+  logoutText: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.error,
+  },
+  version: {
+    ...typography.caption,
+    color: colors.gray600,
+    textAlign: 'center',
+    marginTop: spacing[4],
+  },
+});
+
+export default ProfileScreen;
