@@ -1,0 +1,322 @@
+// Prisma Schema for VEXA — Real-time Service Marketplace
+// Mirrors frontend types/index.ts exactly
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum JobStatus {
+  POSTED
+  BIDDING
+  ACCEPTED
+  ON_SITE_INSPECTION
+  MODIFICATION_REQUESTED
+  IN_PROGRESS
+  COMPLETED
+  PAYMENT_PENDING
+  PAID
+  UNDER_DISPUTE
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  ESCALATED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  BID_RECEIVED
+  BID_ACCEPTED
+  JOB_UPDATE
+  MODIFICATION_REQUEST
+  MODIFICATION_APPROVED
+  MODIFICATION_REJECTED
+  PAYMENT_RECEIVED
+  PAYMENT_COMPLETED
+  DISPUTE_OPENED
+  DISPUTE_RESOLVED
+  RATING_RECEIVED
+  SYSTEM
+}
+
+// ─── Models ───────────────────────────────────
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  name       String
+  password   String?
+  googleId   String?  @unique
+  avatarUrl  String?
+  phone      String?
+  role       UserRole @default(CUSTOMER)
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  serviceRequests     ServiceRequest[]     @relation("CustomerJobs")
+  selectedForJobs     ServiceRequest[]     @relation("SelectedProvider")
+  bids                Bid[]
+  modifications       JobModification[]
+  paymentsMade        Payment[]            @relation("Payer")
+  paymentsReceived    Payment[]            @relation("Payee")
+  ratingsGiven        Rating[]             @relation("Rater")
+  ratingsReceived     Rating[]             @relation("Ratee")
+  disputesRaised      Dispute[]            @relation("DisputeRaiser")
+  disputesResolved    Dispute[]            @relation("DisputeResolver")
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  passwordResetTokens PasswordResetToken[]
+
+  emailVerified Boolean   @default(false)
+  image         String?
+  sessions      Session[]
+  accounts      Account[]
+
+  @@map("users")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@map("password_reset_tokens")
+}
+
+model ServiceRequest {
+  id                 String    @id @default(uuid())
+  customerId         String
+  customer           User      @relation("CustomerJobs", fields: [customerId], references: [id])
+  title              String
+  description        String
+  category           String
+  location           String
+  latitude           Float?
+  longitude          Float?
+  images             String[]  @default([])
+  originalPrice      Float
+  revisedPrice       Float?
+  status             JobStatus @default(POSTED)
+  selectedBidId      String?
+  selectedProviderId String?
+  selectedProvider   User?     @relation("SelectedProvider", fields: [selectedProviderId], references: [id])
+  maxModifications   Int       @default(2)
+  modificationCount  Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relations
+  bids          Bid[]
+  modifications JobModification[]
+  payments      Payment[]
+  ratings       Rating[]
+  disputes      Dispute[]
+
+  @@map("service_requests")
+}
+
+model Bid {
+  id                String         @id @default(uuid())
+  jobId             String
+  job               ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  providerId        String
+  provider          User           @relation(fields: [providerId], references: [id])
+  amount            Float
+  message           String
+  estimatedDuration String
+  isSelected        Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([jobId, providerId])
+  @@map("bids")
+}
+
+model JobModification {
+  id               String         @id @default(uuid())
+  jobId            String
+  job              ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  providerId       String
+  provider         User           @relation(fields: [providerId], references: [id])
+  revisionReason   String
+  originalPrice    Float
+  revisedPrice     Float
+  revisionImages   String[]       @default([])
+  approvalStatus   ApprovalStatus @default(PENDING)
+  customerResponse String?
+  securityHash     String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@map("job_modifications")
+}
+
+model Payment {
+  id                String         @id @default(uuid())
+  jobId             String
+  job               ServiceRequest @relation(fields: [jobId], references: [id])
+  payerId           String
+  payer             User           @relation("Payer", fields: [payerId], references: [id])
+  payeeId           String
+  payee             User           @relation("Payee", fields: [payeeId], references: [id])
+  amount            Float
+  currency          String         @default("INR")
+  status            PaymentStatus  @default(PENDING)
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+  securityHash      String
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@map("payments")
+}
+
+model Rating {
+  id        String         @id @default(uuid())
+  jobId     String
+  job       ServiceRequest @relation(fields: [jobId], references: [id])
+  raterId   String
+  rater     User           @relation("Rater", fields: [raterId], references: [id])
+  rateeId   String
+  ratee     User           @relation("Ratee", fields: [rateeId], references: [id])
+  score     Int
+  review    String
+  createdAt DateTime       @default(now())
+
+  @@unique([jobId, raterId])
+  @@map("ratings")
+}
+
+model Dispute {
+  id           String         @id @default(uuid())
+  jobId        String
+  job          ServiceRequest @relation(fields: [jobId], references: [id])
+  raisedById   String
+  raisedBy     User           @relation("DisputeRaiser", fields: [raisedById], references: [id])
+  reason       String
+  evidence     String[]       @default([])
+  status       DisputeStatus  @default(OPEN)
+  resolution   String?
+  resolvedById String?
+  resolvedBy   User?          @relation("DisputeResolver", fields: [resolvedById], references: [id])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@map("disputes")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  entityType    String
+  entityId      String
+  action        String
+  performedById String
+  performedBy   User     @relation(fields: [performedById], references: [id])
+  previousState Json?
+  newState      Json?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
