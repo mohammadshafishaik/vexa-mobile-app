@@ -9,6 +9,7 @@ import { Server as SocketServer } from 'socket.io';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth';
 import { setIO } from './lib/socket';
+import prisma from './lib/prisma';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -59,6 +60,21 @@ app.get('/', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/health/db', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    res.status(503).json({
+      status: 'error',
+      database: 'unavailable',
+      code: error?.code || 'UNKNOWN',
+      message: error?.message || 'Database probe failed',
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // API Routes
