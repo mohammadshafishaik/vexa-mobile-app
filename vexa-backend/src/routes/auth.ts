@@ -16,6 +16,32 @@ import {
 
 const router = Router();
 
+const authUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  password: true,
+  googleId: true,
+  avatarUrl: true,
+  phone: true,
+  role: true,
+  isVerified: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+const toPublicUser = (user: any) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  avatarUrl: user.avatarUrl,
+  phone: user.phone,
+  role: user.role,
+  isVerified: user.isVerified,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+});
+
 // ─── POST /api/auth/register ───────────────────────────
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -33,7 +59,10 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     // Check if user exists
-    const existing = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    const existing = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      select: { id: true },
+    });
     if (existing) {
       res.status(409).json({ success: false, message: 'An account with this email already exists' });
       return;
@@ -51,13 +80,14 @@ router.post('/register', async (req: Request, res: Response) => {
         password: hashedPassword,
         isVerified: true,
       },
+      select: authUserSelect,
     });
 
     const tokenPayload = { userId: user.id, email: user.email, role: user.role };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
-    const { password: _, ...userWithoutPassword } = user;
+    const userWithoutPassword = toPublicUser(user);
 
     res.status(201).json({
       success: true,
@@ -90,6 +120,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
+      select: authUserSelect,
     });
 
     if (!user) {
@@ -115,7 +146,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
-    const { password: _, ...userWithoutPassword } = user;
+    const userWithoutPassword = toPublicUser(user);
 
     res.json({
       success: true,
@@ -151,6 +182,7 @@ router.post('/google', async (req: Request, res: Response) => {
           { email: email.trim().toLowerCase() },
         ],
       },
+      select: authUserSelect,
     });
 
     if (user) {
@@ -159,6 +191,7 @@ router.post('/google', async (req: Request, res: Response) => {
         user = await prisma.user.update({
           where: { id: user.id },
           data: { googleId, avatarUrl: user.avatarUrl || photoUrl || null },
+          select: authUserSelect,
         });
       }
     } else {
@@ -172,6 +205,7 @@ router.post('/google', async (req: Request, res: Response) => {
           isVerified: true,
           role: 'CUSTOMER', // Default, can be changed later
         },
+        select: authUserSelect,
       });
     }
 
@@ -179,7 +213,7 @@ router.post('/google', async (req: Request, res: Response) => {
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
-    const { password: _, ...userWithoutPassword } = user;
+    const userWithoutPassword = toPublicUser(user);
 
     res.json({
       success: true,
@@ -211,6 +245,11 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
 
     const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
+      select: {
+        id: true,
+        password: true,
+        googleId: true,
+      },
     });
 
     // Always return success to prevent email enumeration
@@ -342,7 +381,14 @@ router.post('/refresh', async (req: Request, res: Response) => {
     }
 
     const decoded = verifyRefreshToken(refreshToken);
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+      },
+    });
     if (!user) {
       res.status(404).json({ success: false, message: 'User not found' });
       return;
@@ -368,7 +414,7 @@ router.get('/profile', authMiddleware, async (req: Request, res: Response) => {
       where: { id: req.user!.userId },
       select: {
         id: true, email: true, name: true, avatarUrl: true,
-        phone: true, role: true, isVerified: true, googleId: true,
+        phone: true, role: true, isVerified: true,
         createdAt: true, updatedAt: true,
       },
     });
@@ -461,6 +507,12 @@ router.put('/change-password', authMiddleware, async (req: Request, res: Respons
 
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        password: true,
+      },
     });
 
     if (!user || !user.password) {
