@@ -145,11 +145,13 @@ const ProviderDashboardScreen: React.FC = () => {
           </Text>
           <Text style={styles.headerSubtitle}>Find and manage your jobs</Text>
         </View>
-        <Avatar
-          name={user?.name ?? 'Provider'}
-          imageUrl={user?.avatarUrl}
-          size="md"
-        />
+        <TouchableOpacity onPress={() => navigation.getParent()?.navigate('Profile')}>
+          <Avatar
+            name={user?.name ?? 'Provider'}
+            imageUrl={user?.avatarUrl}
+            size="md"
+          />
+        </TouchableOpacity>
       </Animated.View>
 
       {/* Stats — Provider specific */}

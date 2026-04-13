@@ -221,4 +221,82 @@ router.get('/history', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/payments/cash ─────────────────────────────
+// Instant cash payment — no Razorpay involved
+router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.body;
+
+    if (!jobId) {
+      res.status(400).json({ success: false, message: 'jobId is required' });
+      return;
+    }
+
+    const job = await prisma.serviceRequest.findUnique({
+      where: { id: jobId },
+      include: { selectedProvider: true, customer: true },
+    });
+
+    if (!job) {
+      res.status(404).json({ success: false, message: 'Job not found' });
+      return;
+    }
+    if (job.customerId !== req.user!.userId) {
+      res.status(403).json({ success: false, message: 'Only the customer can initiate payment' });
+      return;
+    }
+    if (!job.selectedProviderId) {
+      res.status(400).json({ success: false, message: 'No provider assigned to this job' });
+      return;
+    }
+
+    const amount = job.revisedPrice || job.originalPrice;
+
+    // Create completed cash payment record
+    const payment = await prisma.payment.create({
+      data: {
+        jobId,
+        payerId: req.user!.userId,
+        payeeId: job.selectedProviderId,
+        amount,
+        paymentMethod: 'CASH',
+        status: 'COMPLETED',
+      },
+    });
+
+    // Update job status to PAID
+    await prisma.serviceRequest.update({
+      where: { id: jobId },
+      data: { status: 'PAID' },
+    });
+
+    // Notify provider
+    if (job.selectedProviderId) {
+      await createAndPushNotification({
+        userId: job.selectedProviderId,
+        type: 'PAYMENT_RECEIVED',
+        title: 'Cash Payment Received! 💰',
+        body: `Customer paid ₹${amount} in cash for "${job.title}"`,
+        data: { jobId, paymentId: payment.id },
+      });
+    }
+
+    // Notify customer
+    await createAndPushNotification({
+      userId: job.customerId,
+      type: 'PAYMENT_COMPLETED',
+      title: 'Payment Confirmed ✅',
+      body: `Your cash payment of ₹${amount} for "${job.title}" is recorded`,
+      data: { jobId, paymentId: payment.id },
+    });
+
+    try { getIO().emit('payment:completed', { jobId, payment }); } catch (e) {}
+
+    res.status(201).json({ success: true, data: payment });
+  } catch (error: any) {
+    console.error('[Payments] cash error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;

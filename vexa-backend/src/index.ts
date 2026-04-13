@@ -18,6 +18,10 @@ import modificationRoutes from './routes/modifications';
 import paymentRoutes from './routes/payments';
 import ratingRoutes from './routes/ratings';
 import notificationRoutes from './routes/notifications';
+import disputeRoutes from './routes/disputes';
+import uploadRoutes from './routes/upload';
+import userRoutes from './routes/users';
+
 
 const app = express();
 const server = http.createServer(app);
@@ -45,6 +49,9 @@ app.all('/api/auth/*splat', toNodeHandler(auth));
 // JSON body parsing for all other routes
 app.use(express.json());
 
+// Serve static files for uploads
+app.use('/uploads', express.static('uploads'));
+
 // Health check
 app.get('/', (_req, res) => {
   res.json({ status: 'ok', service: 'VEXA API', version: '1.0.0' });
@@ -63,6 +70,9 @@ app.use('/api/modifications', modificationRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/ratings', ratingRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/disputes', disputeRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/users', userRoutes);
 
 // Socket.io connection
 io.on('connection', (socket) => {

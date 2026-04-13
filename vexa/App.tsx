@@ -9,7 +9,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RootNavigator from './src/navigation/RootNavigator';
 import NotificationToast from './src/components/ui/NotificationToast';
+import NoNetworkScreen from './src/screens/NoNetworkScreen';
 import { useNotificationStore } from './src/store/useNotificationStore';
+import { useNetInfo } from '@react-native-community/netinfo';
 import './global.css';
 
 function App(): React.JSX.Element {
@@ -20,6 +22,10 @@ function App(): React.JSX.Element {
     body: '',
     type: 'SYSTEM',
   });
+
+  // Network state
+  const netInfo = useNetInfo();
+  const isOffline = netInfo.isConnected === false;
 
   // Listen for new notifications from the store
   useEffect(() => {
@@ -44,14 +50,20 @@ function App(): React.JSX.Element {
     <GestureHandlerRootView style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
       <SafeAreaProvider>
-        <RootNavigator />
-        <NotificationToast
-          visible={toastVisible}
-          title={toastData.title}
-          body={toastData.body}
-          type={toastData.type}
-          onDismiss={() => setToastVisible(false)}
-        />
+        {isOffline ? (
+          <NoNetworkScreen />
+        ) : (
+          <>
+            <RootNavigator />
+            <NotificationToast
+              visible={toastVisible}
+              title={toastData.title}
+              body={toastData.body}
+              type={toastData.type}
+              onDismiss={() => setToastVisible(false)}
+            />
+          </>
+        )}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

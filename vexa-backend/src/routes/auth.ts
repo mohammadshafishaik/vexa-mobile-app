@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import prisma from '../lib/prisma';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { authMiddleware } from '../middleware/auth';
+import { sendPasswordResetEmail } from '../lib/email';
 import {
   validateRegistration,
   validateLogin,
@@ -248,16 +249,23 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
       },
     });
 
-    // In development, log the token. In production, send email.
-    console.log(`\n📧 Password Reset Token for ${email}:`);
-    console.log(`   Token: ${token}`);
-    console.log(`   Expires: ${expiresAt.toISOString()}\n`);
+    // Send the actual email
+    try {
+      await sendPasswordResetEmail(email.trim().toLowerCase(), token);
+    } catch (emailErr) {
+      console.warn('[Auth] Email send failed, falling back to log:', emailErr);
+    }
+
+    // Also log in dev mode for testing
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`\n📧 Password Reset Token for ${email}:`);
+      console.log(`   Token: ${token}`);
+      console.log(`   Expires: ${expiresAt.toISOString()}\n`);
+    }
 
     res.json({
       success: true,
       message: 'If an account with that email exists, a password reset link has been sent.',
-      // Include token in dev mode for testing
-      ...(process.env.NODE_ENV !== 'production' && { resetToken: token }),
     });
   } catch (error: any) {
     console.error('Forgot password error:', error);
@@ -483,7 +491,16 @@ router.put('/change-password', authMiddleware, async (req: Request, res: Respons
       data: { password: hashedPassword },
     });
 
-    res.json({ success: true, message: 'Password changed successfully' });
+    // Issue fresh tokens so old refresh token doesn't break login
+    const tokenPayload = { userId: user.id, email: user.email, role: user.role };
+    const accessToken = generateAccessToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully',
+      data: { tokens: { accessToken, refreshToken } },
+    });
   } catch (error: any) {
     console.error('Change password error:', error);
     res.status(500).json({ success: false, message: 'Failed to change password' });

@@ -14,67 +14,101 @@ import { ChevronLeft, Star } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import Button from '../../components/ui/Button';
 import GlassCard from '../../components/ui/GlassCard';
+import Avatar from '../../components/ui/Avatar';
 import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { CustomerStackParamList } from '../../types';
-import { RATING } from '../../utils/constants';
+import { useAuthStore } from '../../store/useAuthStore';
 import { jobService } from '../../services/jobs';
+import { socketService } from '../../services/socket';
 
 type RatingRoute = RouteProp<CustomerStackParamList, 'Rating'>;
 
 const RatingScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<RatingRoute>();
   const { jobId } = route.params;
+  const currentUser = useAuthStore((s) => s.user);
+  const isProvider = currentUser?.role === 'PROVIDER';
+
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [providerId, setProviderId] = useState<string | null>(null);
-  const [providerName, setProviderName] = useState('');
+  const [rateeId, setRateeId] = useState<string | null>(null);
+  const [rateeName, setRateeName] = useState('');
+  const [rateeAvatar, setRateeAvatar] = useState<string | null>(null);
+  const [alreadyRated, setAlreadyRated] = useState(false);
 
-  // Fetch job to get the provider (ratee) ID
   useEffect(() => {
     const fetchJob = async () => {
       try {
         const job = await jobService.getJobById(jobId);
-        if (job.selectedProviderId) {
-          setProviderId(job.selectedProviderId);
-        }
-        if (job.selectedProvider) {
-          setProviderName(job.selectedProvider.name);
+        if (isProvider) {
+          // Provider rates the customer
+          setRateeId(job.customerId);
+          setRateeName(job.customer?.name ?? 'Customer');
+          setRateeAvatar(job.customer?.avatarUrl ?? null);
+        } else {
+          // Customer rates the provider
+          if (job.selectedProviderId) {
+            setRateeId(job.selectedProviderId);
+          }
+          if (job.selectedProvider) {
+            setRateeName(job.selectedProvider.name);
+            setRateeAvatar(job.selectedProvider.avatarUrl ?? null);
+          }
         }
       } catch (err: any) {
         Alert.alert('Error', 'Failed to load job details');
       }
     };
     fetchJob();
+  }, [jobId, isProvider]);
+
+  // Listen for real-time rating events
+  useEffect(() => {
+    const socket = socketService.getSocket();
+    if (socket) {
+      const handler = (data: any) => {
+        if (data.jobId === jobId) {
+          // Another party just rated — could show a notification
+        }
+      };
+      socket.on('rating:new', handler);
+      return () => { socket.off('rating:new', handler); };
+    }
   }, [jobId]);
 
   const handleSubmit = async () => {
-    if (rating === 0) return;
-    if (!providerId) {
-      Alert.alert('Error', 'No provider found for this job');
+    if (rating === 0) {
+      Alert.alert('Required', 'Please select a star rating');
+      return;
+    }
+    if (!rateeId) {
+      Alert.alert('Error', 'Could not identify who to rate');
       return;
     }
     if (!review.trim()) {
-      Alert.alert('Error', 'Please write a review before submitting');
+      Alert.alert('Required', 'Please write a review before submitting');
       return;
     }
 
     setIsSubmitting(true);
     try {
       await jobService.submitRating(jobId, {
-        rateeId: providerId,
+        rateeId,
         score: rating,
         review: review.trim(),
       });
-      Alert.alert('Thank You!', 'Your rating has been submitted successfully.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      setAlreadyRated(true);
     } catch (err: any) {
       const message = err?.response?.data?.message || err.message || 'Failed to submit rating';
-      Alert.alert('Error', message);
+      if (message.includes('already rated')) {
+        setAlreadyRated(true);
+      } else {
+        Alert.alert('Error', message);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -85,9 +119,45 @@ const RatingScreen: React.FC = () => {
     return labels[score] ?? '';
   };
 
+  if (alreadyRated) {
+    return (
+      <ScreenContainer>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+          >
+            <ChevronLeft size={24} color={colors.white} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Rating</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <View style={styles.successContainer}>
+          <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.successContent}>
+            <View style={styles.successIconBox}>
+              <Star size={48} color={colors.warning} fill={colors.warning} />
+            </View>
+            <Text style={styles.successTitle}>Thank You! 🎉</Text>
+            <Text style={styles.successSubtitle}>
+              Your {rating > 0 ? `${rating}-star` : ''} rating has been submitted successfully.
+              {'\n'}This helps improve the VEXA community.
+            </Text>
+            <Button
+              title="Done"
+              onPress={() => navigation.goBack()}
+              variant="primary"
+              size="lg"
+              fullWidth
+            />
+          </Animated.View>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -96,7 +166,7 @@ const RatingScreen: React.FC = () => {
           <ChevronLeft size={24} color={colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          Rate {providerName || 'Provider'}
+          Rate {rateeName || (isProvider ? 'Customer' : 'Provider')}
         </Text>
         <View style={{ width: 24 }} />
       </View>
@@ -105,6 +175,15 @@ const RatingScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Ratee Profile */}
+        <Animated.View entering={FadeInDown.delay(50).duration(400)} style={styles.profileSection}>
+          <Avatar name={rateeName || 'User'} imageUrl={rateeAvatar} size="xl" />
+          <Text style={styles.rateeName}>{rateeName}</Text>
+          <Text style={styles.rateeRole}>
+            {isProvider ? 'Customer' : 'Service Provider'}
+          </Text>
+        </Animated.View>
+
         {/* Rating Stars */}
         <Animated.View
           entering={FadeInDown.delay(100).duration(400)}
@@ -147,7 +226,7 @@ const RatingScreen: React.FC = () => {
           <GlassCard>
             <TextInput
               style={styles.reviewInput}
-              placeholder="Share your experience with this provider..."
+              placeholder={`Share your experience with this ${isProvider ? 'customer' : 'provider'}...`}
               placeholderTextColor={colors.gray500}
               value={review}
               onChangeText={setReview}
@@ -191,9 +270,24 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing[10],
   },
+  profileSection: {
+    alignItems: 'center',
+    paddingVertical: spacing[4],
+  },
+  rateeName: {
+    fontFamily: fontFamilies.bold,
+    fontSize: fontSizes.lg,
+    color: colors.white,
+    marginTop: spacing[3],
+  },
+  rateeRole: {
+    ...typography.bodySm,
+    color: colors.gray500,
+    marginTop: spacing[1],
+  },
   ratingContainer: {
     alignItems: 'center',
-    paddingVertical: spacing[8],
+    paddingVertical: spacing[4],
   },
   ratingPrompt: {
     fontFamily: fontFamilies.semibold,
@@ -224,6 +318,38 @@ const styles = StyleSheet.create({
     color: colors.white,
     minHeight: 120,
     lineHeight: 22,
+  },
+  successContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[10],
+  },
+  successContent: {
+    alignItems: 'center',
+  },
+  successIconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing[5],
+  },
+  successTitle: {
+    fontFamily: fontFamilies.bold,
+    fontSize: fontSizes.xl,
+    color: colors.white,
+    marginBottom: spacing[3],
+  },
+  successSubtitle: {
+    ...typography.body,
+    color: colors.gray400,
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 300,
+    marginBottom: spacing[6],
   },
 });
 

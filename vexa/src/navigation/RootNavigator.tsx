@@ -3,6 +3,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
+import { useJobStore } from '../store/useJobStore';
+import { socketService } from '../services/socket';
 import { colors } from '../theme/colors';
 import { UserRole } from '../types';
 
@@ -19,6 +21,23 @@ const RootNavigator: React.FC = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const isHydrated = useAuthStore((s) => s.isHydrated);
+  const updateJob = useJobStore((s) => s.updateJob);
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      socketService.onJobStatusChange((data: any) => {
+        if (data && data.jobId) {
+          updateJob(data.jobId, { status: data.status });
+        }
+      });
+
+      socketService.onModificationSubmitted((data: any) => {
+         if (data && data.jobId) {
+            updateJob(data.jobId, { status: 'MODIFICATION_REQUESTED' as any });
+         }
+      });
+    }
+  }, [isAuthenticated, updateJob]);
 
   return (
     <NavigationContainer

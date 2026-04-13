@@ -12,13 +12,17 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
+import { launchImageLibrary } from 'react-native-image-picker';
+import Geolocation from '@react-native-community/geolocation';
 import {
   ChevronLeft,
   MapPin,
+  Map,
   DollarSign,
   Camera,
   Tag,
   FileText,
+  Zap,
 } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import Button from '../../components/ui/Button';
@@ -29,6 +33,7 @@ import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
 import api from '../../services/api';
+import { uploadService } from '../../services/upload';
 
 const CATEGORIES = [
   'Plumbing',
@@ -50,21 +55,67 @@ const PostJobScreen: React.FC = () => {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [location, setLocation] = useState('');
+  const [coords, setCoords] = useState<{lat: number, lng: number} | null>(null);
   const [price, setPrice] = useState('');
+  const [urgency, setUrgency] = useState<'NORMAL' | 'URGENT'>('NORMAL');
+  const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+
+  const handleGetLocation = () => {
+    setIsGettingLocation(true);
+    Geolocation.getCurrentPosition(
+      (position) => {
+        setCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
+        setLocation(`${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        Alert.alert('Location Error', error.message);
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+  };
+
+  const handlePickImages = async () => {
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      selectionLimit: 4 - images.length,
+    });
+    if (result.assets) {
+      const newUris = result.assets.map((a) => a.uri!).filter(Boolean);
+      setImages((prev) => [...prev, ...newUris]);
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!title.trim() || !description.trim() || !category || !location.trim() || !price) {
+    if (!title.trim() || !description.trim() || !category || !location.trim()) {
       return;
     }
     setIsSubmitting(true);
     try {
+      // Upload images first
+      const uploadedUrls: string[] = [];
+      for (const uri of images) {
+        try {
+          const url = await uploadService.uploadImage(uri);
+          uploadedUrls.push(url);
+        } catch (e) {
+          console.error("Failed to upload image", e);
+        }
+      }
+
       const res = await api.post('/jobs', {
         title: title.trim(),
         description: description.trim(),
         category,
         location: location.trim(),
-        originalPrice: Number(price),
+        latitude: coords?.lat,
+        longitude: coords?.lng,
+        originalPrice: price ? Number(price) : 0,
+        urgency,
+        images: uploadedUrls,
       });
 
       if (res.data.success) {
@@ -159,20 +210,28 @@ const PostJobScreen: React.FC = () => {
 
           {/* Location */}
           <Animated.View entering={FadeInDown.delay(250).duration(400)}>
-            <Input
-              label="Location"
-              placeholder="Enter service location"
-              value={location}
-              onChangeText={setLocation}
-              icon={<MapPin size={18} color={colors.gray500} />}
-            />
+            <View style={styles.locationContainer}>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="Location"
+                  placeholder="Enter service location"
+                  value={location}
+                  onChangeText={setLocation}
+                  icon={<MapPin size={18} color={colors.gray500} />}
+                />
+              </View>
+              <TouchableOpacity style={styles.gpsButton} onPress={handleGetLocation} disabled={isGettingLocation}>
+                <Map size={20} color={colors.white} />
+                <Text style={styles.gpsText}>{isGettingLocation ? '...' : 'GPS'}</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
 
-          {/* Price */}
+          {/* Budget (Optional) */}
           <Animated.View entering={FadeInDown.delay(300).duration(400)}>
             <Input
-              label="Budget (₹)"
-              placeholder="Enter your budget"
+              label="Estimated Budget (₹) — Optional"
+              placeholder="Leave blank if unsure"
               value={price}
               onChangeText={setPrice}
               keyboardType="numeric"
@@ -180,13 +239,44 @@ const PostJobScreen: React.FC = () => {
             />
           </Animated.View>
 
+          {/* Urgency */}
+          <Animated.View entering={FadeInDown.delay(320).duration(400)}>
+            <Text style={styles.label}>URGENCY</Text>
+            <View style={styles.urgencyRow}>
+              <TouchableOpacity
+                style={[styles.urgencyChip, urgency === 'NORMAL' && styles.urgencyNormalActive]}
+                onPress={() => setUrgency('NORMAL')}
+              >
+                <Text style={[styles.urgencyText, urgency === 'NORMAL' && styles.urgencyTextActive]}>Normal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.urgencyChip, urgency === 'URGENT' && styles.urgencyUrgentActive]}
+                onPress={() => setUrgency('URGENT')}
+              >
+                <Zap size={14} color={urgency === 'URGENT' ? colors.black : colors.warning} />
+                <Text style={[styles.urgencyText, urgency === 'URGENT' && { color: colors.black, fontFamily: fontFamilies.bold }]}>Urgent</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
           {/* Photos */}
           <Animated.View entering={FadeInDown.delay(350).duration(400)}>
-            <Text style={styles.label}>PHOTOS (OPTIONAL)</Text>
-            <TouchableOpacity style={styles.photoUpload} activeOpacity={0.7}>
-              <Camera size={24} color={colors.gray500} />
-              <Text style={styles.photoText}>Add photos</Text>
-            </TouchableOpacity>
+            <Text style={styles.label}>PHOTOS (OPTIONAL) - {images.length}/4</Text>
+            {images.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing[3] }}>
+                {images.map((uri, idx) => (
+                   <View key={idx} style={{ marginRight: spacing[2], borderRadius: 8, overflow: 'hidden' }}>
+                      <Animated.Image source={{ uri }} style={{ width: 80, height: 80 }} />
+                   </View>
+                ))}
+              </ScrollView>
+            )}
+            {images.length < 4 && (
+              <TouchableOpacity onPress={handlePickImages} style={styles.photoUpload} activeOpacity={0.7}>
+                <Camera size={24} color={colors.gray500} />
+                <Text style={styles.photoText}>Add photos</Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
 
           {/* Submit */}
@@ -202,8 +292,7 @@ const PostJobScreen: React.FC = () => {
                 !title.trim() ||
                 !description.trim() ||
                 !category ||
-                !location.trim() ||
-                !price
+                !location.trim()
               }
               style={{ marginTop: spacing[4] }}
             />
@@ -289,6 +378,61 @@ const styles = StyleSheet.create({
   photoText: {
     ...typography.bodySm,
     color: colors.gray500,
+  },
+  urgencyRow: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    marginBottom: spacing[4],
+  },
+  urgencyChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[1],
+    paddingVertical: spacing[3],
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.gray700,
+    backgroundColor: colors.gray900,
+  },
+  urgencyNormalActive: {
+    borderColor: colors.white,
+    backgroundColor: colors.white,
+  },
+  urgencyUrgentActive: {
+    borderColor: colors.warning,
+    backgroundColor: colors.warning,
+  },
+  urgencyText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: fontSizes.base,
+    color: colors.gray400,
+  },
+  urgencyTextActive: {
+    color: colors.black,
+    fontFamily: fontFamilies.bold,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  gpsButton: {
+    backgroundColor: colors.gray800,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.gray700,
+    width: 60,
+    height: 50,
+    marginTop: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gpsText: {
+    ...typography.caption,
+    color: colors.white,
+    marginTop: 2,
   },
 });
 

@@ -6,6 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
+  Image,
+  Linking,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
@@ -17,6 +20,11 @@ import {
   CreditCard,
   Star,
   AlertCircle,
+  Camera,
+  CheckCircle,
+  Mail,
+  Zap,
+  AlertTriangle,
 } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
@@ -27,8 +35,10 @@ import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { JobStatus, CustomerStackParamList, ServiceRequest } from '../../types';
 import { formatCurrency, formatRelativeTime } from '../../utils/helpers';
+import { jobService } from '../../services/jobs';
 import api from '../../services/api';
 
 type JobDetailRoute = RouteProp<CustomerStackParamList, 'JobDetail'>;
@@ -38,8 +48,14 @@ const JobDetailScreen: React.FC = () => {
   const route = useRoute<JobDetailRoute>();
   const { jobId } = route.params;
   const setSelectedJob = useJobStore((s) => s.setSelectedJob);
+  const currentUser = useAuthStore((s) => s.user);
   const [job, setJob] = useState<ServiceRequest | null>(useJobStore.getState().selectedJob);
   const [loading, setLoading] = useState(!job);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const isProvider = currentUser?.role === 'PROVIDER';
+  const isCustomer = currentUser?.role === 'CUSTOMER';
+  const isAssignedProvider = job?.selectedProviderId === currentUser?.id;
 
   useFocusEffect(
     useCallback(() => {
@@ -57,12 +73,8 @@ const JobDetailScreen: React.FC = () => {
           if (isActive) setLoading(false);
         }
       };
-      
       fetchJob();
-      
-      return () => {
-        isActive = false;
-      };
+      return () => { isActive = false; };
     }, [jobId])
   );
 
@@ -87,6 +99,75 @@ const JobDetailScreen: React.FC = () => {
     }
   };
 
+  // Provider marks work as complete
+  const handleFinishWork = () => {
+    Alert.alert(
+      'Mark Work as Complete',
+      'Are you sure you have finished the work? The customer will review your completion.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Finish Work',
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              const updated = await jobService.completeJob(jobId);
+              setJob(updated);
+              setSelectedJob(updated);
+              Alert.alert('Success', 'Work marked as completed! The customer will now review.');
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.message || 'Failed to complete job');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Customer accepts completed work
+  const handleAcceptWork = () => {
+    Alert.alert(
+      'Accept Work',
+      'Are you satisfied with the completed work? After accepting, you will proceed to payment.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Accept & Proceed to Pay',
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              const updated = await jobService.acceptWork(jobId);
+              setJob(updated);
+              setSelectedJob(updated);
+              Alert.alert('Work Accepted!', 'You can now proceed to payment.', [
+                { text: 'Pay Now', onPress: handlePayment },
+                { text: 'Later' },
+              ]);
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.message || 'Failed to accept work');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleContactSupport = () => {
+    const subject = encodeURIComponent(`Issue with Job: ${job?.title || jobId}`);
+    const body = encodeURIComponent(
+      `Job ID: ${jobId}\nJob Title: ${job?.title}\nStatus: ${job?.status}\n\nDescribe your issue:\n`
+    );
+    Linking.openURL(`mailto:support@vexaapp.com?subject=${subject}&body=${body}`);
+  };
+
+  const handleRaiseDispute = () => {
+    navigation.navigate('Dispute', { jobId });
+  };
+
   if (loading) {
     return (
       <ScreenContainer>
@@ -106,7 +187,9 @@ const JobDetailScreen: React.FC = () => {
           <ChevronLeft size={24} color={colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Job Details</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={handleContactSupport}>
+          <Mail size={22} color={colors.gray400} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -115,7 +198,15 @@ const JobDetailScreen: React.FC = () => {
       >
         {/* Status & Title */}
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-          <JobStatusBadge status={job?.status ?? JobStatus.POSTED} />
+          <View style={styles.statusRow}>
+            <JobStatusBadge status={job?.status ?? JobStatus.POSTED} />
+            {job?.urgency === 'URGENT' && (
+              <View style={styles.urgentBadge}>
+                <Zap size={12} color={colors.warning} />
+                <Text style={styles.urgentText}>URGENT</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.jobTitle}>{job?.title ?? 'Service Request'}</Text>
           <Text style={styles.jobDescription}>
             {job?.description ?? 'No description provided'}
@@ -144,25 +235,53 @@ const JobDetailScreen: React.FC = () => {
                 </Text>
               </View>
             </View>
-            <View style={styles.divider} />
-            <View style={styles.infoRow}>
-              <CreditCard size={18} color={colors.gray400} />
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Price</Text>
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceValue}>
-                    {formatCurrency(job?.revisedPrice ?? job?.originalPrice ?? 0)}
-                  </Text>
-                  {job?.revisedPrice && job.revisedPrice !== job.originalPrice && (
-                    <Text style={styles.originalPrice}>
-                      {formatCurrency(job.originalPrice)}
-                    </Text>
-                  )}
+            {(job?.originalPrice ?? 0) > 0 && (
+              <>
+                <View style={styles.divider} />
+                <View style={styles.infoRow}>
+                  <CreditCard size={18} color={colors.gray400} />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Budget</Text>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.priceValue}>
+                        {formatCurrency(job?.revisedPrice ?? job?.originalPrice ?? 0)}
+                      </Text>
+                      {job?.revisedPrice && job.revisedPrice !== job.originalPrice && (
+                        <Text style={styles.originalPrice}>
+                          {formatCurrency(job.originalPrice)}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
+              </>
+            )}
           </GlassCard>
         </Animated.View>
+
+        {/* Problem Images */}
+        {job?.images && job.images.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(220).duration(400)}>
+            <Text style={styles.sectionTitle}>Problem Photos</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
+              {job.images.map((img, i) => (
+                <Image key={i} source={{ uri: img }} style={styles.thumbnail} />
+              ))}
+            </ScrollView>
+          </Animated.View>
+        )}
+
+        {/* Completed Work Photos */}
+        {job?.completedImages && job.completedImages.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(230).duration(400)}>
+            <Text style={styles.sectionTitle}>Completion Photos</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
+              {job.completedImages.map((img, i) => (
+                <Image key={i} source={{ uri: img }} style={styles.thumbnail} />
+              ))}
+            </ScrollView>
+          </Animated.View>
+        )}
 
         {/* Bids Summary */}
         {job?.bids && job.bids.length > 0 && (
@@ -212,6 +331,7 @@ const JobDetailScreen: React.FC = () => {
           entering={FadeInDown.delay(400).duration(400)}
           style={styles.actions}
         >
+          {/* BIDDING: Customer sees View Bids, Provider sees View Bids too */}
           {job?.status === JobStatus.BIDDING && (
             <Button
               title={`View Live Bids${job.bids ? ` (${job.bids.length})` : ''}`}
@@ -221,6 +341,45 @@ const JobDetailScreen: React.FC = () => {
               fullWidth
             />
           )}
+
+          {/* ACCEPTED / IN_PROGRESS: Provider can mark work as done */}
+          {(job?.status === JobStatus.ACCEPTED || job?.status === JobStatus.IN_PROGRESS) && isAssignedProvider && (
+            <Button
+              title="✅ Finish Work"
+              onPress={handleFinishWork}
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={actionLoading}
+              icon={<CheckCircle size={18} color={colors.black} />}
+            />
+          )}
+
+          {/* COMPLETED: Customer reviews and accepts work */}
+          {job?.status === JobStatus.COMPLETED && isCustomer && (
+            <Button
+              title="Accept Work & Proceed to Pay"
+              onPress={handleAcceptWork}
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={actionLoading}
+              icon={<CheckCircle size={18} color={colors.black} />}
+            />
+          )}
+
+          {/* COMPLETED: Provider sees waiting message */}
+          {job?.status === JobStatus.COMPLETED && isAssignedProvider && (
+            <GlassCard style={styles.waitingCard}>
+              <View style={styles.waitingRow}>
+                <Clock size={20} color={colors.warning} />
+                <Text style={styles.waitingText}>
+                  Waiting for customer to review and accept your work...
+                </Text>
+              </View>
+            </GlassCard>
+          )}
+
           {job?.status === JobStatus.MODIFICATION_REQUESTED && (
             <Button
               title="Review Modification"
@@ -231,7 +390,9 @@ const JobDetailScreen: React.FC = () => {
               icon={<AlertCircle size={18} color={colors.white} />}
             />
           )}
-          {job?.status === JobStatus.PAYMENT_PENDING && (
+
+          {/* PAYMENT_PENDING: Customer can pay */}
+          {job?.status === JobStatus.PAYMENT_PENDING && isCustomer && (
             <Button
               title="Make Payment"
               onPress={handlePayment}
@@ -241,15 +402,54 @@ const JobDetailScreen: React.FC = () => {
               icon={<CreditCard size={18} color={colors.black} />}
             />
           )}
+
+          {/* PAYMENT_PENDING: Provider sees waiting */}
+          {job?.status === JobStatus.PAYMENT_PENDING && isAssignedProvider && (
+            <GlassCard style={styles.waitingCard}>
+              <View style={styles.waitingRow}>
+                <CreditCard size={20} color={colors.warning} />
+                <Text style={styles.waitingText}>
+                  Waiting for customer to complete payment...
+                </Text>
+              </View>
+            </GlassCard>
+          )}
+
+          {/* PAID: Both can rate */}
           {job?.status === JobStatus.PAID && (
             <Button
-              title="Rate Provider"
+              title={isProvider ? 'Rate Customer' : 'Rate Provider'}
               onPress={handleRate}
               variant="primary"
               size="lg"
               fullWidth
               icon={<Star size={18} color={colors.black} />}
             />
+          )}
+
+          {/* Contact Support — always visible */}
+          <TouchableOpacity style={styles.supportButton} onPress={handleContactSupport}>
+            <Mail size={16} color={colors.gray400} />
+            <Text style={styles.supportText}>Report Issue / Contact Support</Text>
+          </TouchableOpacity>
+
+          {/* Raise Dispute */}
+          {(isCustomer || isAssignedProvider) && job?.status !== JobStatus.POSTED && job?.status !== JobStatus.BIDDING && job?.status !== JobStatus.CANCELLED && job?.status !== 'UNDER_DISPUTE' && (
+            <TouchableOpacity style={styles.disputeButton} onPress={handleRaiseDispute}>
+              <AlertTriangle size={16} color={colors.error} />
+              <Text style={styles.disputeText}>Raise Dispute</Text>
+            </TouchableOpacity>
+          )}
+
+          {job?.status === 'UNDER_DISPUTE' && (
+            <GlassCard style={[styles.waitingCard, { borderColor: 'rgba(239, 68, 68, 0.3)' }]}>
+              <View style={styles.waitingRow}>
+                <AlertTriangle size={20} color={colors.error} />
+                <Text style={[styles.waitingText, { color: colors.error }]}>
+                  This job is currently under dispute review.
+                </Text>
+              </View>
+            </GlassCard>
           )}
         </Animated.View>
       </ScrollView>
@@ -271,6 +471,28 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: spacing[10],
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  urgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    gap: 4,
+  },
+  urgentText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 10,
+    color: colors.warning,
+    letterSpacing: 1,
   },
   jobTitle: {
     fontFamily: fontFamilies.bold,
@@ -334,6 +556,16 @@ const styles = StyleSheet.create({
     color: colors.white,
     marginBottom: spacing[3],
   },
+  imageScroll: {
+    marginBottom: spacing[5],
+  },
+  thumbnail: {
+    width: 120,
+    height: 90,
+    borderRadius: borderRadius.md,
+    marginRight: spacing[2],
+    backgroundColor: colors.gray800,
+  },
   providerCard: {
     marginBottom: spacing[5],
   },
@@ -365,6 +597,45 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing[3],
     marginTop: spacing[2],
+  },
+  waitingCard: {
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  waitingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  waitingText: {
+    ...typography.bodySm,
+    color: colors.warning,
+    flex: 1,
+    lineHeight: 20,
+  },
+  supportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[3],
+    marginTop: spacing[2],
+  },
+  supportText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: fontSizes.sm,
+    color: colors.gray400,
+  },
+  disputeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[3],
+  },
+  disputeText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: fontSizes.sm,
+    color: colors.error,
   },
 });
 

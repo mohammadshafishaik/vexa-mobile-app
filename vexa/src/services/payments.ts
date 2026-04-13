@@ -64,4 +64,15 @@ export const paymentService = {
     });
     return response.data.data;
   },
+
+  /**
+   * Pay with cash — instant completion, no Razorpay
+   */
+  payCash: async (jobId: string): Promise<Payment> => {
+    const response = await api.post<ApiResponse<Payment>>(
+      '/payments/cash',
+      { jobId },
+    );
+    return response.data.data;
+  },
 };

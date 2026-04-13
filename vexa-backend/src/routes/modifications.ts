@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import prisma from '../lib/prisma';
 import { authMiddleware } from '../middleware/auth';
+import { getIO } from '../lib/socket';
 
 const router = Router();
 
@@ -56,7 +57,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     });
 
     // Notify customer
-    await prisma.notification.create({
+    const notification = await prisma.notification.create({
       data: {
         userId: job.customerId,
         type: 'MODIFICATION_REQUEST',
@@ -65,6 +66,22 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         data: { jobId, modificationId: modification.id },
       },
     });
+
+    // Emit Socket.io events
+    try {
+      const io = getIO();
+      io.to(`user:${job.customerId}`).emit('modification:requested', {
+        jobId,
+        modification,
+        notification,
+      });
+      io.to(`bidding:${jobId}`).emit('job:statusChange', {
+        jobId,
+        status: 'MODIFICATION_REQUESTED',
+      });
+    } catch (e) {
+      console.error('Socket.io emit error:', e);
+    }
 
     res.status(201).json({ success: true, data: modification });
   } catch (error: any) {
@@ -121,7 +138,7 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // Notify provider
-    await prisma.notification.create({
+    const notification = await prisma.notification.create({
       data: {
         userId: modification.providerId,
         type: approvalStatus === 'APPROVED' ? 'MODIFICATION_APPROVED' : 'MODIFICATION_REJECTED',
@@ -130,6 +147,23 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
         data: { jobId: modification.jobId, modificationId: modification.id },
       },
     });
+
+    // Emit Socket.io events
+    try {
+      const io = getIO();
+      io.to(`user:${modification.providerId}`).emit('modification:updated', {
+        jobId: modification.jobId,
+        modification: updated,
+        approvalStatus,
+        notification,
+      });
+      io.to(`bidding:${modification.jobId}`).emit('job:statusChange', {
+        jobId: modification.jobId,
+        status: approvalStatus === 'APPROVED' ? 'IN_PROGRESS' : 'IN_PROGRESS',
+      });
+    } catch (e) {
+      console.error('Socket.io emit error:', e);
+    }
 
     res.json({ success: true, data: updated });
   } catch (error: any) {

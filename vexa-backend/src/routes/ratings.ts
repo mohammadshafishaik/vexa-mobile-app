@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authMiddleware } from '../middleware/auth';
 import { createAndPushNotification } from '../utils/notificationHelper';
+import { getIO } from '../lib/socket';
 
 const router = Router();
 
@@ -83,6 +84,9 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     });
 
     res.status(201).json({ success: true, data: rating });
+
+    // Emit real-time rating event
+    try { getIO().emit('rating:new', { jobId, rating }); } catch (e) {}
   } catch (error: any) {
     console.error('[Ratings] create error:', error);
     res.status(500).json({ success: false, message: error.message });

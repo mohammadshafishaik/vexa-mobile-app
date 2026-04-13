@@ -143,11 +143,13 @@ const CustomerDashboardScreen: React.FC = () => {
           </Text>
           <Text style={styles.headerSubtitle}>Manage your service requests</Text>
         </View>
-        <Avatar
-          name={user?.name ?? 'User'}
-          imageUrl={user?.avatarUrl}
-          size="md"
-        />
+        <TouchableOpacity onPress={() => navigation.getParent()?.navigate('Profile')}>
+          <Avatar
+            name={user?.name ?? 'User'}
+            imageUrl={user?.avatarUrl}
+            size="md"
+          />
+        </TouchableOpacity>
       </Animated.View>
 
       {/* Quick Action */}

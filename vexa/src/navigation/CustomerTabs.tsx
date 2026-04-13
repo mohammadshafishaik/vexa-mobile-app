@@ -16,6 +16,7 @@ import JobDetailScreen from '../screens/customer/JobDetailScreen';
 import RevisionApprovalScreen from '../screens/customer/RevisionApprovalScreen';
 import PaymentScreen from '../screens/customer/PaymentScreen';
 import RatingScreen from '../screens/customer/RatingScreen';
+import DisputeScreen from '../screens/customer/DisputeScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
@@ -42,6 +43,7 @@ const DashboardStackScreen: React.FC = () => {
       <DashStack.Screen name="RevisionApproval" component={RevisionApprovalScreen} />
       <DashStack.Screen name="Payment" component={PaymentScreen} />
       <DashStack.Screen name="Rating" component={RatingScreen} />
+      <DashStack.Screen name="Dispute" component={DisputeScreen} />
     </DashStack.Navigator>
   );
 };

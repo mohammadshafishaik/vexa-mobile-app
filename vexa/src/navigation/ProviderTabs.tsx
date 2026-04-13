@@ -13,6 +13,9 @@ import ProviderDashboardScreen from '../screens/provider/DashboardScreen';
 import ModificationRequestScreen from '../screens/provider/ModificationRequestScreen';
 import JobDetailScreen from '../screens/customer/JobDetailScreen';
 import LiveBiddingScreen from '../screens/customer/LiveBiddingScreen';
+import PaymentScreen from '../screens/customer/PaymentScreen';
+import RatingScreen from '../screens/customer/RatingScreen';
+import DisputeScreen from '../screens/customer/DisputeScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
@@ -39,6 +42,9 @@ const DashboardStackScreen: React.FC = () => {
         name="ModificationRequest"
         component={ModificationRequestScreen}
       />
+      <DashStack.Screen name="Payment" component={PaymentScreen} />
+      <DashStack.Screen name="Rating" component={RatingScreen} />
+      <DashStack.Screen name="Dispute" component={DisputeScreen} />
     </DashStack.Navigator>
   );
 };

@@ -6,11 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Linking,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { ChevronLeft, Shield, CreditCard, Check, AlertCircle } from 'lucide-react-native';
+import { ChevronLeft, Shield, CreditCard, Check, AlertCircle, Banknote, Smartphone } from 'lucide-react-native';
 import RazorpayCheckout from 'react-native-razorpay';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
@@ -27,7 +26,7 @@ import { useJobStore } from '../../store/useJobStore';
 type PaymentRoute = RouteProp<CustomerStackParamList, 'Payment'>;
 
 const PaymentScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<PaymentRoute>();
   const { jobId } = route.params;
   const [isProcessing, setIsProcessing] = useState(false);
@@ -35,9 +34,9 @@ const PaymentScreen: React.FC = () => {
   const [jobTitle, setJobTitle] = useState('');
   const [amount, setAmount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<'RAZORPAY' | 'CASH'>('RAZORPAY');
   const updateJob = useJobStore((s) => s.updateJob);
 
-  // Fetch real job details on mount
   useEffect(() => {
     const fetchJob = async () => {
       try {
@@ -54,20 +53,17 @@ const PaymentScreen: React.FC = () => {
     fetchJob();
   }, [jobId]);
 
-  const serviceFee = Math.round(amount * 0.05); // 5% platform fee
+  const serviceFee = Math.round(amount * 0.05);
   const total = amount + serviceFee;
 
-  const handlePay = async () => {
+  const handleRazorpayPay = async () => {
     setIsProcessing(true);
     setError(null);
     try {
-      // Wait for the backend to create an order
       const order = await paymentService.createOrder(jobId);
-
-      // Open Razorpay Checkout natively
       const options = {
         description: order.jobTitle || 'Service Payment',
-        image: 'https://i.imgur.com/3g7nmJC.png', // Or your app logo URL
+        image: 'https://i.imgur.com/3g7nmJC.png',
         currency: order.currency,
         key: order.keyId,
         amount: order.amount,
@@ -78,20 +74,18 @@ const PaymentScreen: React.FC = () => {
 
       try {
         const data = await RazorpayCheckout.open(options);
-
-        // Verify payment on our backend
         await paymentService.verifyPayment({
           jobId,
           razorpayOrderId: data.razorpay_order_id,
           razorpayPaymentId: data.razorpay_payment_id,
           razorpaySignature: data.razorpay_signature,
         });
-
         updateJob(jobId, { status: 'PAID' as any });
-        Alert.alert('Success', 'Payment completed successfully!');
-        navigation.goBack();
+        Alert.alert('Payment Successful! ✅', 'Your payment has been processed successfully.', [
+          { text: 'Rate Provider', onPress: () => navigation.replace('Rating', { jobId }) },
+          { text: 'Done', onPress: () => navigation.goBack() },
+        ]);
       } catch (checkoutError: any) {
-        // User cancelled or payment failed
         const msg = checkoutError?.error?.description || 'Payment was cancelled or failed';
         setError(msg);
       } finally {
@@ -100,6 +94,43 @@ const PaymentScreen: React.FC = () => {
     } catch (err: any) {
       setError(err.message || 'Failed to create payment order');
       setIsProcessing(false);
+    }
+  };
+
+  const handleCashPay = async () => {
+    Alert.alert(
+      'Confirm Cash Payment',
+      `Are you sure you have paid ₹${total} in cash to the provider?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, I Paid',
+          onPress: async () => {
+            setIsProcessing(true);
+            setError(null);
+            try {
+              await paymentService.payCash(jobId);
+              updateJob(jobId, { status: 'PAID' as any });
+              Alert.alert('Cash Payment Recorded! ✅', 'Payment has been marked as completed.', [
+                { text: 'Rate Provider', onPress: () => navigation.replace('Rating', { jobId }) },
+                { text: 'Done', onPress: () => navigation.goBack() },
+              ]);
+            } catch (err: any) {
+              setError(err?.response?.data?.message || err.message || 'Failed to record cash payment');
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePay = () => {
+    if (selectedMethod === 'RAZORPAY') {
+      handleRazorpayPay();
+    } else {
+      handleCashPay();
     }
   };
 
@@ -122,7 +153,6 @@ const PaymentScreen: React.FC = () => {
 
   return (
     <ScreenContainer>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -138,7 +168,6 @@ const PaymentScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Error Display */}
         {error && (
           <Animated.View entering={FadeInDown.duration(300)}>
             <GlassCard style={styles.errorCard}>
@@ -155,71 +184,93 @@ const PaymentScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Order Summary</Text>
           <GlassCard>
             <Text style={styles.jobTitle}>{jobTitle}</Text>
-
             <View style={styles.lineItem}>
               <Text style={styles.lineLabel}>Service Amount</Text>
-              <Text style={styles.lineValue}>
-                {formatCurrency(amount)}
-              </Text>
+              <Text style={styles.lineValue}>{formatCurrency(amount)}</Text>
             </View>
             <View style={styles.lineItem}>
               <Text style={styles.lineLabel}>Platform Fee (5%)</Text>
-              <Text style={styles.lineValue}>
-                {formatCurrency(serviceFee)}
-              </Text>
+              <Text style={styles.lineValue}>{formatCurrency(serviceFee)}</Text>
             </View>
             <View style={styles.totalDivider} />
             <View style={styles.lineItem}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>
-                {formatCurrency(total)}
-              </Text>
+              <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
             </View>
           </GlassCard>
         </Animated.View>
 
-        {/* Security Notice */}
+        {/* Payment Method Selection */}
         <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+          <Text style={styles.sectionTitle}>Payment Method</Text>
+
+          <TouchableOpacity
+            style={[styles.methodCard, selectedMethod === 'RAZORPAY' && styles.methodCardSelected]}
+            onPress={() => setSelectedMethod('RAZORPAY')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.radio, selectedMethod === 'RAZORPAY' && styles.radioSelected]}>
+              {selectedMethod === 'RAZORPAY' && <View style={styles.radioInner} />}
+            </View>
+            <Smartphone size={22} color={selectedMethod === 'RAZORPAY' ? colors.white : colors.gray500} />
+            <View style={styles.methodInfo}>
+              <Text style={[styles.methodTitle, selectedMethod === 'RAZORPAY' && styles.methodTitleSelected]}>
+                Pay Online
+              </Text>
+              <Text style={styles.methodDesc}>UPI, Cards, Net Banking via Razorpay</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.methodCard, selectedMethod === 'CASH' && styles.methodCardSelected]}
+            onPress={() => setSelectedMethod('CASH')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.radio, selectedMethod === 'CASH' && styles.radioSelected]}>
+              {selectedMethod === 'CASH' && <View style={styles.radioInner} />}
+            </View>
+            <Banknote size={22} color={selectedMethod === 'CASH' ? colors.white : colors.gray500} />
+            <View style={styles.methodInfo}>
+              <Text style={[styles.methodTitle, selectedMethod === 'CASH' && styles.methodTitleSelected]}>
+                Pay with Cash
+              </Text>
+              <Text style={styles.methodDesc}>Pay the provider directly in cash</Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Security Notice */}
+        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <GlassCard style={styles.securityCard}>
             <View style={styles.securityRow}>
               <Shield size={20} color={colors.success} />
               <View style={styles.securityContent}>
-                <Text style={styles.securityTitle}>Secure Payment</Text>
+                <Text style={styles.securityTitle}>
+                  {selectedMethod === 'RAZORPAY' ? 'Secure Payment' : 'Cash Payment'}
+                </Text>
                 <Text style={styles.securityText}>
-                  Payment is processed securely via Razorpay.
-                  Your payment details are encrypted end-to-end.
+                  {selectedMethod === 'RAZORPAY'
+                    ? 'Payment is processed securely via Razorpay. Your payment details are encrypted end-to-end.'
+                    : 'Confirm that you have paid the provider in cash. This will be recorded in our system.'}
                 </Text>
               </View>
             </View>
           </GlassCard>
         </Animated.View>
 
-        {/* Payment Benefits */}
-        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-          <View style={styles.benefitsList}>
-            {[
-              'Money held in escrow until job is verified',
-              'Full refund if service is not completed',
-              'Dispute resolution support',
-            ].map((benefit, index) => (
-              <View key={index} style={styles.benefitItem}>
-                <Check size={16} color={colors.success} />
-                <Text style={styles.benefitText}>{benefit}</Text>
-              </View>
-            ))}
-          </View>
-        </Animated.View>
-
         {/* Pay Button */}
         <Animated.View entering={FadeInDown.delay(400).duration(400)}>
           <Button
-            title={`Pay ${formatCurrency(total)}`}
+            title={selectedMethod === 'RAZORPAY' ? `Pay ${formatCurrency(total)}` : `Confirm Cash Payment`}
             onPress={handlePay}
             variant="primary"
             size="lg"
             fullWidth
             loading={isProcessing}
-            icon={<CreditCard size={18} color={colors.black} />}
+            icon={selectedMethod === 'RAZORPAY'
+              ? <CreditCard size={18} color={colors.black} />
+              : <Banknote size={18} color={colors.black} />
+            }
             style={{ marginTop: spacing[6] }}
           />
         </Animated.View>
@@ -271,6 +322,7 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.lg,
     color: colors.white,
     marginBottom: spacing[3],
+    marginTop: spacing[4],
   },
   jobTitle: {
     fontFamily: fontFamilies.semibold,
@@ -311,8 +363,58 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xl,
     color: colors.white,
   },
+  // Payment Method Cards
+  methodCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing[4],
+    backgroundColor: colors.gray900,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    marginBottom: spacing[3],
+    gap: spacing[3],
+  },
+  methodCardSelected: {
+    borderColor: colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.gray600,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioSelected: {
+    borderColor: colors.white,
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.white,
+  },
+  methodInfo: {
+    flex: 1,
+  },
+  methodTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.gray500,
+    marginBottom: 2,
+  },
+  methodTitleSelected: {
+    color: colors.white,
+  },
+  methodDesc: {
+    ...typography.caption,
+    color: colors.gray500,
+  },
   securityCard: {
-    marginTop: spacing[4],
+    marginTop: spacing[2],
     borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   securityRow: {
@@ -333,19 +435,6 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.gray400,
     lineHeight: 20,
-  },
-  benefitsList: {
-    marginTop: spacing[4],
-    gap: spacing[3],
-  },
-  benefitItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  benefitText: {
-    ...typography.body,
-    color: colors.gray300,
   },
 });
 

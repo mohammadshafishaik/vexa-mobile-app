@@ -2,9 +2,19 @@ import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from 'ax
 import { Platform } from 'react-native';
 import { useAuthStore } from '../store/useAuthStore';
 
-// Use 10.0.2.2 for Android emulator, localhost for iOS simulator
+// ─── PRODUCTION CONFIGURATION ───────────────────────────────────
+// TODO: Replace with your Render.com backend URL after deployment
+const PRODUCTION_URL = 'https://your-backend-url.onrender.com/api';
+
+// ─── DEVELOPMENT CONFIGURATION ──────────────────────────────────
 const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-const BASE_URL = `http://${HOST}:3000/api`;
+const DEVELOPMENT_URL = `http://${HOST}:3000/api`;
+
+// ─── SWITCH BETWEEN DEVELOPMENT AND PRODUCTION ──────────────────
+// Set to true for production, false for local development
+const USE_PRODUCTION = false;
+
+const BASE_URL = USE_PRODUCTION ? PRODUCTION_URL : DEVELOPMENT_URL;
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,

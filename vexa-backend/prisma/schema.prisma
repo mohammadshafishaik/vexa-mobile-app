@@ -80,6 +80,14 @@ model User {
   phone      String?
   role       UserRole @default(CUSTOMER)
   isVerified Boolean  @default(false)
+  
+  // KYC & Verification
+  kycDocuments String[] @default([])
+  kycStatus    String   @default("PENDING") // PENDING, VERIFIED, REJECTED
+  
+  // Push Notifications
+  deviceTokens String[] @default([])
+  
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -129,8 +137,11 @@ model ServiceRequest {
   location           String
   latitude           Float?
   longitude          Float?
+  scheduledAt        DateTime? // Scheduled date/time for the service
   images             String[]  @default([])
-  originalPrice      Float
+  completedImages    String[]  @default([])
+  originalPrice      Float     @default(0)
+  urgency            String    @default("NORMAL")
   revisedPrice       Float?
   status             JobStatus @default(POSTED)
   selectedBidId      String?
@@ -198,10 +209,11 @@ model Payment {
   amount            Float
   currency          String         @default("INR")
   status            PaymentStatus  @default(PENDING)
+  paymentMethod     String         @default("RAZORPAY")
   razorpayOrderId   String?
   razorpayPaymentId String?
   razorpaySignature String?
-  securityHash      String
+  securityHash      String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 

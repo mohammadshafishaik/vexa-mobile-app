@@ -59,10 +59,10 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 // POST /api/jobs — create a service request
 router.post('/', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { title, description, category, location, latitude, longitude, images, originalPrice } = req.body;
+    const { title, description, category, location, latitude, longitude, images, originalPrice, urgency } = req.body;
 
-    if (!title || !description || !category || !location || !originalPrice) {
-      res.status(400).json({ success: false, message: 'Missing required fields' });
+    if (!title || !description || !category || !location) {
+      res.status(400).json({ success: false, message: 'Missing required fields (title, description, category, location)' });
       return;
     }
 
@@ -76,7 +76,8 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         latitude: latitude || null,
         longitude: longitude || null,
         images: images || [],
-        originalPrice: Number(originalPrice),
+        originalPrice: Number(originalPrice || 0),
+        urgency: urgency || 'NORMAL',
         status: 'BIDDING',
       },
       include: {
@@ -149,4 +150,111 @@ router.patch('/:id/status', authMiddleware, async (req: Request, res: Response) 
   }
 });
 
+
+
+// ─── PATCH /api/jobs/:id/complete ──────────────────
+// Provider marks job as completed and uploads completion photos
+router.patch('/:id/complete', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { completedImages } = req.body;
+    const jobId = req.params.id as string;
+
+    const job = await prisma.serviceRequest.findUnique({ where: { id: jobId } });
+    if (!job) {
+      res.status(404).json({ success: false, message: 'Job not found' });
+      return;
+    }
+    if (job.selectedProviderId !== req.user!.userId) {
+      res.status(403).json({ success: false, message: 'Only the assigned provider can mark this job as complete' });
+      return;
+    }
+    if (!['ACCEPTED', 'IN_PROGRESS', 'ON_SITE_INSPECTION'].includes(job.status)) {
+      res.status(400).json({ success: false, message: `Cannot complete job with status "${job.status}"` });
+      return;
+    }
+
+    const updated = await prisma.serviceRequest.update({
+      where: { id: jobId },
+      data: {
+        status: 'COMPLETED',
+        completedImages: completedImages || [],
+      },
+      include: {
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+      },
+    });
+
+    // Notify customer
+    try {
+      const { createAndPushNotification } = await import('../utils/notificationHelper');
+      await createAndPushNotification({
+        userId: job.customerId,
+        type: 'JOB_UPDATE',
+        title: 'Work Completed! ✅',
+        body: `Provider has finished work on "${job.title}". Please review and accept.`,
+        data: { jobId },
+      });
+    } catch (e) {}
+
+    try { getIO().emit('job:statusChange', { jobId, status: 'COMPLETED', job: updated }); } catch (e) {}
+
+    res.json({ success: true, data: updated });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ─── PATCH /api/jobs/:id/accept-work ──────────────────
+// Customer reviews completion and accepts the work → status becomes PAYMENT_PENDING
+router.patch('/:id/accept-work', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const jobId = req.params.id as string;
+
+    const job = await prisma.serviceRequest.findUnique({ where: { id: jobId } });
+    if (!job) {
+      res.status(404).json({ success: false, message: 'Job not found' });
+      return;
+    }
+    if (job.customerId !== req.user!.userId) {
+      res.status(403).json({ success: false, message: 'Only the customer can accept work' });
+      return;
+    }
+    if (job.status !== 'COMPLETED') {
+      res.status(400).json({ success: false, message: `Cannot accept work for job with status "${job.status}"` });
+      return;
+    }
+
+    const updated = await prisma.serviceRequest.update({
+      where: { id: jobId },
+      data: { status: 'PAYMENT_PENDING' },
+      include: {
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+      },
+    });
+
+    // Notify provider
+    if (job.selectedProviderId) {
+      try {
+        const { createAndPushNotification } = await import('../utils/notificationHelper');
+        await createAndPushNotification({
+          userId: job.selectedProviderId,
+          type: 'JOB_UPDATE',
+          title: 'Work Accepted! 🎉',
+          body: `Customer accepted your work on "${job.title}". Payment is pending.`,
+          data: { jobId },
+        });
+      } catch (e) {}
+    }
+
+    try { getIO().emit('job:statusChange', { jobId, status: 'PAYMENT_PENDING', job: updated }); } catch (e) {}
+
+    res.json({ success: true, data: updated });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;
+

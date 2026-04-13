@@ -86,8 +86,10 @@ export interface ServiceRequest {
   latitude: number | null;
   longitude: number | null;
   images: string[];
+  completedImages: string[];
   originalPrice: number;
   revisedPrice: number | null;
+  urgency: string;
   status: JobStatus;
   selectedBidId: string | null;
   selectedProviderId: string | null;
@@ -260,6 +262,7 @@ export type CustomerStackParamList = {
   RevisionApproval: { jobId: string; modificationId: string };
   Payment: { jobId: string };
   Rating: { jobId: string };
+  Dispute: { jobId: string };
 };
 
 export type ProviderTabParamList = {
@@ -273,4 +276,8 @@ export type ProviderStackParamList = {
   JobDetail: { jobId: string };
   LiveBidding: { jobId: string };
   ModificationRequest: { jobId: string };
+  Payment: { jobId: string };
+  Rating: { jobId: string };
+  Dispute: { jobId: string };
 };
+

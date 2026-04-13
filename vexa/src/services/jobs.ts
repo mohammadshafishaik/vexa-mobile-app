@@ -19,7 +19,8 @@ export const jobService = {
     latitude?: number;
     longitude?: number;
     images?: string[];
-    originalPrice: number;
+    originalPrice?: number;
+    urgency?: string;
   }): Promise<ServiceRequest> => {
     const response = await api.post<ApiResponse<ServiceRequest>>('/jobs', data);
     return response.data.data;
@@ -70,6 +71,30 @@ export const jobService = {
     const response = await api.post<ApiResponse<ServiceRequest>>(
       `/jobs/${jobId}/accept-bid`,
       { bidId },
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Provider marks job as completed with optional photos
+   */
+  completeJob: async (
+    jobId: string,
+    completedImages?: string[],
+  ): Promise<ServiceRequest> => {
+    const response = await api.patch<ApiResponse<ServiceRequest>>(
+      `/jobs/${jobId}/complete`,
+      { completedImages: completedImages || [] },
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Customer accepts completed work → moves to PAYMENT_PENDING
+   */
+  acceptWork: async (jobId: string): Promise<ServiceRequest> => {
+    const response = await api.patch<ApiResponse<ServiceRequest>>(
+      `/jobs/${jobId}/accept-work`,
     );
     return response.data.data;
   },

@@ -22,9 +22,11 @@ import { fontFamilies, fontSizes, typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
 import { validatePassword, passwordsMatch } from '../utils/validation';
 import api from '../services/api';
+import { useAuthStore } from '../store/useAuthStore';
 
 const ChangePasswordScreen: React.FC = () => {
   const navigation = useNavigation();
+  const setTokens = useAuthStore((s) => s.setTokens);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -75,6 +77,10 @@ const ChangePasswordScreen: React.FC = () => {
       });
 
       if (response.data.success) {
+        // Store fresh tokens so auth doesn't break
+        if (response.data.data?.tokens) {
+          setTokens(response.data.data.tokens);
+        }
         setIsSuccess(true);
       } else {
         setGeneralError(response.data.message || 'Failed to change password');
