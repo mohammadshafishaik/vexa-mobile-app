@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "npx prisma generate && npx prisma migrate deploy",
-    "start": "tsx src/index.ts",
+    "start": "npx prisma migrate deploy && tsx src/index.ts",
     "prisma:studio": "npx prisma studio",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:seed": "tsx --env-file=.env scripts/seed.ts",
