@@ -10,8 +10,9 @@ const router = Router();
 router.post('/', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { jobId, amount, message, estimatedDuration } = req.body;
+    const numericAmount = Number(amount);
 
-    if (!jobId || !amount || !message || !estimatedDuration) {
+    if (!jobId || Number.isNaN(numericAmount) || numericAmount <= 0 || !message || !estimatedDuration) {
       res.status(400).json({ success: false, message: 'Missing required fields' });
       return;
     }
@@ -38,7 +39,45 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       where: { jobId_providerId: { jobId, providerId: req.user!.userId } },
     });
     if (existingBid) {
-      res.status(409).json({ success: false, message: 'You already placed a bid on this job' });
+      if (existingBid.isSelected) {
+        res.status(400).json({ success: false, message: 'Cannot update an accepted bid' });
+        return;
+      }
+
+      if (numericAmount >= existingBid.amount) {
+        res.status(400).json({
+          success: false,
+          message: `Re-bid amount must be lower than your current bid of ₹${existingBid.amount}`,
+        });
+        return;
+      }
+
+      const updatedBid = await prisma.bid.update({
+        where: { id: existingBid.id },
+        data: {
+          amount: numericAmount,
+          message,
+          estimatedDuration,
+        },
+        include: {
+          provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        },
+      });
+
+      await createAndPushNotification({
+        userId: job.customerId,
+        type: 'BID_RECEIVED',
+        title: 'Bid Updated 🔁',
+        body: `${updatedBid.provider.name} updated bid to ₹${updatedBid.amount} on "${job.title}"`,
+        data: { jobId, bidId: updatedBid.id, providerName: updatedBid.provider.name, amount: updatedBid.amount },
+      });
+
+      try {
+        getIO().to(`bidding:${jobId}`).emit('bid:updated', updatedBid);
+        getIO().emit('job:bidUpdate', { jobId, bid: updatedBid, updated: true });
+      } catch (e) {}
+
+      res.json({ success: true, data: updatedBid });
       return;
     }
 
@@ -46,7 +85,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       data: {
         jobId,
         providerId: req.user!.userId,
-        amount: Number(amount),
+        amount: numericAmount,
         message,
         estimatedDuration,
       },
@@ -161,10 +200,28 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
 
     const { amount, message, estimatedDuration } = req.body;
+    const hasAmountUpdate = amount !== undefined;
+    const numericAmount = hasAmountUpdate ? Number(amount) : undefined;
+
+    if (hasAmountUpdate) {
+      if (Number.isNaN(numericAmount) || (numericAmount as number) <= 0) {
+        res.status(400).json({ success: false, message: 'Invalid bid amount' });
+        return;
+      }
+
+      if ((numericAmount as number) >= bid.amount) {
+        res.status(400).json({
+          success: false,
+          message: `Re-bid amount must be lower than your current bid of ₹${bid.amount}`,
+        });
+        return;
+      }
+    }
+
     const updated = await prisma.bid.update({
       where: { id: req.params.id as string },
       data: {
-        ...(amount && { amount: Number(amount) }),
+        ...(hasAmountUpdate && { amount: numericAmount as number }),
         ...(message && { message }),
         ...(estimatedDuration && { estimatedDuration }),
       },
@@ -176,6 +233,7 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
     // Broadcast updated bid
     try {
       getIO().to(`bidding:${bid.jobId}`).emit('bid:updated', updated);
+      getIO().emit('job:bidUpdate', { jobId: bid.jobId, bid: updated, updated: true });
     } catch (e) {}
 
     res.json({ success: true, data: updated });

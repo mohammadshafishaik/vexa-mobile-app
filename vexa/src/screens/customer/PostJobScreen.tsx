@@ -63,46 +63,72 @@ const PostJobScreen: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
 
-  const resolveAreaFromCoordinates = async (lat: number, lng: number): Promise<string | null> => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
-        {
-          headers: {
-            Accept: 'application/json',
-          },
-        },
-      );
+  const getAreaTextFromNominatim = (payload: any): string | null => {
+    const address = payload?.address || {};
+    const area = address.suburb
+      || address.neighbourhood
+      || address.village
+      || address.town
+      || address.city_district
+      || address.city
+      || address.county;
+    const region = address.state_district || address.state;
 
-      if (!response.ok) return null;
+    const compact = [area, region].filter(Boolean).join(', ');
+    if (compact) return compact;
 
-      const payload = await response.json();
-      const address = payload?.address || {};
-      const area = address.suburb
-        || address.neighbourhood
-        || address.village
-        || address.town
-        || address.city_district
-        || address.city
-        || address.county;
-      const region = address.state_district || address.state;
-
-      const compact = [area, region].filter(Boolean).join(', ');
-      if (compact) return compact;
-
-      if (payload?.display_name) {
-        return String(payload.display_name)
-          .split(',')
-          .slice(0, 3)
-          .map((part: string) => part.trim())
-          .filter(Boolean)
-          .join(', ');
-      }
-
-      return null;
-    } catch {
-      return null;
+    if (payload?.display_name) {
+      return String(payload.display_name)
+        .split(',')
+        .slice(0, 3)
+        .map((part: string) => part.trim())
+        .filter(Boolean)
+        .join(', ');
     }
+
+    return null;
+  };
+
+  const getAreaTextFromBigDataCloud = (payload: any): string | null => {
+    const area = payload?.locality || payload?.city || payload?.principalSubdivision;
+    const region = payload?.principalSubdivision || payload?.countryName;
+    const compact = [area, region].filter(Boolean).join(', ');
+    return compact || null;
+  };
+
+  const resolveAreaFromCoordinates = async (lat: number, lng: number): Promise<string | null> => {
+    const providers = [
+      {
+        url: `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'VexaMobile/1.0',
+        },
+        parser: getAreaTextFromNominatim,
+      },
+      {
+        url: `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`,
+        headers: {
+          Accept: 'application/json',
+        },
+        parser: getAreaTextFromBigDataCloud,
+      },
+    ];
+
+    for (const provider of providers) {
+      try {
+        const response = await fetch(provider.url, { headers: provider.headers });
+        if (!response.ok) continue;
+
+        const payload = await response.json();
+        const areaText = provider.parser(payload);
+        if (areaText) return areaText;
+      } catch {
+        // Try the next reverse geocoding provider.
+      }
+    }
+
+    return null;
   };
 
   const requestLocationPermission = async (): Promise<boolean> => {

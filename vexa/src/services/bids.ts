@@ -21,12 +21,12 @@ export const bidService = {
   getBidsForJob: async (
     jobId: string,
     params?: { page?: number; limit?: number },
-  ): Promise<PaginatedResponse<Bid>> => {
-    const response = await api.get<ApiResponse<PaginatedResponse<Bid>>>(
+  ): Promise<Bid[]> => {
+    const response = await api.get<ApiResponse<Bid[]>>(
       `/bids/job/${jobId}`,
       { params },
     );
-    return response.data.data;
+    return response.data.data ?? [];
   },
 
   /**

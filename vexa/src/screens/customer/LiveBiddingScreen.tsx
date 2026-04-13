@@ -49,6 +49,7 @@ const LiveBiddingScreen: React.FC = () => {
   const bids = useJobStore((s) => s.bids);
   const setBids = useJobStore((s) => s.setBids);
   const addBid = useJobStore((s) => s.addBid);
+  const updateBidInStore = useJobStore((s) => s.updateBid);
   const selectedJob = useJobStore((s) => s.selectedJob);
   const [jobDetails, setJobDetails] = useState<any>(selectedJob);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,6 +58,9 @@ const LiveBiddingScreen: React.FC = () => {
   const user = useAuthStore((s) => s.user);
   const isProvider = user?.role === UserRole.PROVIDER;
   const activeJob = jobDetails || selectedJob;
+  const providerExistingBid = isProvider && user?.id
+    ? bids.find((bid) => bid.providerId === user.id) || null
+    : null;
 
   // Provider Bid Modal State
   const [isBidModalVisible, setIsBidModalVisible] = useState(false);
@@ -94,9 +98,7 @@ const LiveBiddingScreen: React.FC = () => {
           ]);
 
           if (isActive) {
-            // The response is the bids array directly from { success, data: bids }
-            const bidsData = Array.isArray(response) ? response : (response as any)?.data || [];
-            setBids(bidsData);
+            setBids(response);
 
             if (jobResponse.data?.success) {
               setJobDetails(jobResponse.data.data);
@@ -121,13 +123,40 @@ const LiveBiddingScreen: React.FC = () => {
         }
       });
 
+      socketService.onBidUpdate((payload: any) => {
+        if (!isActive) return;
+
+        // Handles both payload shapes: full bid object and { jobId, bid }
+        const updatedBid = payload?.bid || payload;
+        const bidJobId = updatedBid?.jobId || payload?.jobId;
+
+        if (updatedBid?.id && bidJobId === jobId) {
+          updateBidInStore(updatedBid.id, updatedBid);
+        }
+      });
+
       return () => {
         isActive = false;
         socketService.leaveBiddingRoom(jobId);
         socketService.off(SOCKET_EVENTS.NEW_BID);
+        socketService.off(SOCKET_EVENTS.BID_UPDATE);
       };
-    }, [jobId]),
+    }, [jobId, addBid, setBids, updateBidInStore]),
   );
+
+  const openBidModal = () => {
+    if (providerExistingBid) {
+      setBidAmount(String(providerExistingBid.amount));
+      setBidDuration(providerExistingBid.estimatedDuration || '');
+      setBidMessage(providerExistingBid.message || '');
+    } else {
+      setBidAmount('');
+      setBidDuration('');
+      setBidMessage('');
+    }
+
+    setIsBidModalVisible(true);
+  };
 
   const handleAcceptBid = async (bid: Bid) => {
     Alert.alert(
@@ -161,16 +190,47 @@ const LiveBiddingScreen: React.FC = () => {
       Alert.alert('Error', 'Please fill in all fields to place a bid');
       return;
     }
+
+    const amount = Number(bidAmount);
+    if (Number.isNaN(amount) || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid bid amount');
+      return;
+    }
+
+    if (providerExistingBid && amount >= providerExistingBid.amount) {
+      Alert.alert(
+        'Lower Price Required',
+        `Your new bid must be lower than your current bid of ${formatCurrency(providerExistingBid.amount)}.`,
+      );
+      return;
+    }
     
     setIsSubmittingBid(true);
     try {
-      await bidService.placeBid({
-        jobId,
-        amount: Number(bidAmount),
-        estimatedDuration: bidDuration,
-        message: bidMessage,
-      });
-      Alert.alert('Success', 'Your bid has been placed! You are now competing live.');
+      if (providerExistingBid) {
+        await bidService.updateBid(providerExistingBid.id, {
+          amount,
+          estimatedDuration: bidDuration,
+          message: bidMessage,
+        });
+      } else {
+        await bidService.placeBid({
+          jobId,
+          amount,
+          estimatedDuration: bidDuration,
+          message: bidMessage,
+        });
+      }
+
+      const refreshedBids = await bidService.getBidsForJob(jobId);
+      setBids(refreshedBids);
+
+      Alert.alert(
+        'Success',
+        providerExistingBid
+          ? 'Your bid was updated. You are still in the live competition.'
+          : 'Your bid has been placed! You are now competing live.',
+      );
       setIsBidModalVisible(false);
       setBidAmount('');
       setBidDuration('');
@@ -304,8 +364,8 @@ const LiveBiddingScreen: React.FC = () => {
       {isProvider && (
         <View style={styles.providerActionContainer}>
           <Button
-            title="Place Your Bid"
-            onPress={() => setIsBidModalVisible(true)}
+            title={providerExistingBid ? 'Re-bid with Lower Price' : 'Place Your Bid'}
+            onPress={openBidModal}
             variant="primary"
             size="lg"
             fullWidth
@@ -320,7 +380,15 @@ const LiveBiddingScreen: React.FC = () => {
           style={styles.modalOverlay}
         >
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Submit Your Proposal</Text>
+            <Text style={styles.modalTitle}>
+              {providerExistingBid ? 'Update Your Bid' : 'Submit Your Proposal'}
+            </Text>
+
+            {providerExistingBid && (
+              <Text style={styles.currentBidText}>
+                Current bid: {formatCurrency(providerExistingBid.amount)}
+              </Text>
+            )}
             
             <Input
               label="Bid Amount (₹)"
@@ -356,7 +424,7 @@ const LiveBiddingScreen: React.FC = () => {
               />
               <View style={{ width: spacing[3] }} />
               <Button
-                title="Submit Bid"
+                title={providerExistingBid ? 'Update Bid' : 'Submit Bid'}
                 onPress={handlePlaceBid}
                 variant="primary"
                 style={{ flex: 1 }}
@@ -525,6 +593,11 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xl,
     color: colors.white,
     marginBottom: spacing[4],
+  },
+  currentBidText: {
+    ...typography.bodySm,
+    color: colors.gray400,
+    marginBottom: spacing[3],
   },
   modalActions: {
     flexDirection: 'row',
