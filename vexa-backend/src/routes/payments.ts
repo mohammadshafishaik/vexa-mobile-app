@@ -19,6 +19,8 @@ router.post('/create-order', authMiddleware, async (req: Request, res: Response)
       return;
     }
 
+    console.log('[Payments] Creating order for jobId:', jobId, 'userId:', req.user!.userId);
+
     const job = await prisma.serviceRequest.findUnique({
       where: { id: jobId },
       include: { selectedProvider: true },
@@ -37,8 +39,20 @@ router.post('/create-order', authMiddleware, async (req: Request, res: Response)
       return;
     }
 
+    // Verify provider exists
+    const provider = await prisma.user.findUnique({
+      where: { id: job.selectedProviderId },
+    });
+
+    if (!provider) {
+      res.status(400).json({ success: false, message: 'Provider not found' });
+      return;
+    }
+
     const amount = job.revisedPrice || job.originalPrice;
     const amountInPaise = Math.round(amount * 100); // Razorpay expects paise
+
+    console.log('[Payments] Payment details - amount:', amount, 'payerId:', req.user!.userId, 'payeeId:', job.selectedProviderId);
 
     // Create a REAL Razorpay order
     const order = await razorpay.orders.create({
@@ -57,17 +71,31 @@ router.post('/create-order', authMiddleware, async (req: Request, res: Response)
       .update(`${jobId}-${amount}-${Date.now()}-${order.id}`)
       .digest('hex');
 
-    await prisma.payment.create({
-      data: {
-        jobId,
-        payerId: req.user!.userId,
-        payeeId: job.selectedProviderId,
-        amount,
-        razorpayOrderId: order.id,
-        securityHash,
-        status: 'PENDING',
-      },
-    });
+    const paymentData = {
+      jobId,
+      payerId: req.user!.userId,
+      payeeId: job.selectedProviderId,
+      amount,
+      currency: 'INR',
+      razorpayOrderId: order.id,
+      securityHash,
+      status: 'PENDING' as const,
+      paymentMethod: 'RAZORPAY',
+    };
+
+    console.log('[Payments] Creating payment with data:', paymentData);
+
+    try {
+      await prisma.payment.create({ data: paymentData });
+    } catch (paymentError: any) {
+      console.error('[Payments] Payment creation error details:', {
+        error: paymentError.message,
+        code: paymentError.code,
+        meta: paymentError.meta,
+        data: paymentData,
+      });
+      throw paymentError;
+    }
 
     // Update job status to PAYMENT_PENDING
     await prisma.serviceRequest.update({

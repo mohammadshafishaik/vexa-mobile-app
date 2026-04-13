@@ -12,20 +12,7 @@
           "package_name": "com.vexa.app"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "926413154225-kf6kc11j4cugbjet3pp3m5k64g1gu8i1.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.vexa.app",
-            "certificate_hash": "f486606067a124ce6817e446affc6ac3bc17e7f6"
-          }
-        },
-        {
-          "client_id": "926413154225-gu6bf8poq2i3cf0p7usr522rpdhpkkgk.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
           "current_key": "AIzaSyCef5Wb4Rd6aHUkLKuUNOy2I9hD_guUn4s"
@@ -33,12 +20,7 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "926413154225-gu6bf8poq2i3cf0p7usr522rpdhpkkgk.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

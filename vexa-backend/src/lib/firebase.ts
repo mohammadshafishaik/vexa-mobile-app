@@ -1,20 +1,38 @@
 import admin from 'firebase-admin';
 
-// Initialize Firebase Admin SDK only if credentials are provided
-const useFirebase = !!(
+import fs from 'fs';
+import path from 'path';
+
+let firebaseCredentials: any = null;
+
+if (
   process.env.FIREBASE_PROJECT_ID &&
   process.env.FIREBASE_PRIVATE_KEY &&
   process.env.FIREBASE_CLIENT_EMAIL
-);
+) {
+  firebaseCredentials = {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  };
+} else {
+  try {
+    const __dirname = new URL('.', import.meta.url).pathname;
+    const serviceAccountPath = path.join(__dirname, '../config/firebase-service-account.json');
+    if (fs.existsSync(serviceAccountPath)) {
+      firebaseCredentials = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Error reading firebase-service-account.json', err);
+  }
+}
+
+const useFirebase = !!firebaseCredentials;
 
 if (useFirebase) {
   try {
     admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      }),
+      credential: admin.credential.cert(firebaseCredentials),
     });
     console.log('✅ Firebase Admin SDK initialized for push notifications');
   } catch (error) {

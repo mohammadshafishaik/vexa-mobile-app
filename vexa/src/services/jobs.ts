@@ -8,9 +8,6 @@ import {
 } from '../types';
 
 export const jobService = {
-  /**
-   * Create a new service request (job)
-   */
   createJob: async (data: {
     title: string;
     description: string;
@@ -21,42 +18,32 @@ export const jobService = {
     images?: string[];
     originalPrice?: number;
     urgency?: string;
+    scheduledAt?: string;
   }): Promise<ServiceRequest> => {
     const response = await api.post<ApiResponse<ServiceRequest>>('/jobs', data);
     return response.data.data;
   },
 
-  /**
-   * Get paginated list of jobs
-   */
   getJobs: async (params?: {
     page?: number;
     limit?: number;
     status?: string;
     category?: string;
   }): Promise<PaginatedResponse<ServiceRequest>> => {
-    const response = await api.get<ApiResponse<PaginatedResponse<ServiceRequest>>>(
-      '/jobs',
-      { params },
-    );
-    return response.data.data;
+    const response = await api.get<any>('/jobs', { params });
+    const raw = response.data;
+    if (raw.data && Array.isArray(raw.data)) {
+      return { data: raw.data, total: raw.total, page: raw.page, limit: raw.limit, hasMore: raw.hasMore };
+    }
+    return raw.data;
   },
 
-  /**
-   * Get a single job by ID
-   */
   getJobById: async (jobId: string): Promise<ServiceRequest> => {
     const response = await api.get<ApiResponse<ServiceRequest>>(`/jobs/${jobId}`);
     return response.data.data;
   },
 
-  /**
-   * Update job status (backend enforces valid transitions)
-   */
-  updateJobStatus: async (
-    jobId: string,
-    status: string,
-  ): Promise<ServiceRequest> => {
+  updateJobStatus: async (jobId: string, status: string): Promise<ServiceRequest> => {
     const response = await api.patch<ApiResponse<ServiceRequest>>(
       `/jobs/${jobId}/status`,
       { status },
@@ -64,24 +51,13 @@ export const jobService = {
     return response.data.data;
   },
 
-  /**
-   * Accept a bid for a job
-   */
+  // Correct route: POST /api/bids/:bidId/accept
   acceptBid: async (jobId: string, bidId: string): Promise<ServiceRequest> => {
-    const response = await api.post<ApiResponse<ServiceRequest>>(
-      `/jobs/${jobId}/accept-bid`,
-      { bidId },
-    );
+    const response = await api.post<ApiResponse<ServiceRequest>>(`/bids/${bidId}/accept`);
     return response.data.data;
   },
 
-  /**
-   * Provider marks job as completed with optional photos
-   */
-  completeJob: async (
-    jobId: string,
-    completedImages?: string[],
-  ): Promise<ServiceRequest> => {
+  completeJob: async (jobId: string, completedImages?: string[]): Promise<ServiceRequest> => {
     const response = await api.patch<ApiResponse<ServiceRequest>>(
       `/jobs/${jobId}/complete`,
       { completedImages: completedImages || [] },
@@ -89,79 +65,48 @@ export const jobService = {
     return response.data.data;
   },
 
-  /**
-   * Customer accepts completed work → moves to PAYMENT_PENDING
-   */
   acceptWork: async (jobId: string): Promise<ServiceRequest> => {
-    const response = await api.patch<ApiResponse<ServiceRequest>>(
-      `/jobs/${jobId}/accept-work`,
-    );
+    const response = await api.patch<ApiResponse<ServiceRequest>>(`/jobs/${jobId}/accept-work`);
     return response.data.data;
   },
 
-  /**
-   * Submit a modification request (provider)
-   */
+  // Correct route: POST /api/modifications
   submitModification: async (
     jobId: string,
-    data: {
-      revisionReason: string;
-      revisedPrice: number;
-      revisionImages?: string[];
-    },
+    data: { revisionReason: string; revisedPrice: number; revisionImages?: string[] },
   ): Promise<JobModification> => {
-    const response = await api.post<ApiResponse<JobModification>>(
-      `/jobs/${jobId}/modifications`,
-      data,
-    );
+    const response = await api.post<ApiResponse<JobModification>>('/modifications', { jobId, ...data });
     return response.data.data;
   },
 
-  /**
-   * Approve or reject a modification (customer)
-   */
+  // Correct route: PATCH /api/modifications/:id
   respondToModification: async (
     jobId: string,
     modificationId: string,
-    data: {
-      approved: boolean;
-      customerResponse?: string;
-    },
+    data: { approved: boolean; customerResponse?: string },
   ): Promise<JobModification> => {
-    const response = await api.put<ApiResponse<JobModification>>(
-      `/jobs/${jobId}/modifications/${modificationId}`,
-      data,
+    const response = await api.patch<ApiResponse<JobModification>>(
+      `/modifications/${modificationId}`,
+      { approvalStatus: data.approved ? 'APPROVED' : 'REJECTED', customerResponse: data.customerResponse },
     );
     return response.data.data;
   },
 
-  /**
-   * Submit a rating for a completed job
-   * Calls /api/ratings (not /api/jobs/:jobId/ratings)
-   */
   submitRating: async (
     jobId: string,
     data: { rateeId: string; score: number; review: string },
   ): Promise<Rating> => {
-    const response = await api.post<ApiResponse<Rating>>(
-      '/ratings',
-      { jobId, ...data },
-    );
+    const response = await api.post<ApiResponse<Rating>>('/ratings', { jobId, ...data });
     return response.data.data;
   },
 
-  /**
-   * Get my jobs (as customer or provider)
-   */
-  getMyJobs: async (params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-  }): Promise<PaginatedResponse<ServiceRequest>> => {
-    const response = await api.get<ApiResponse<PaginatedResponse<ServiceRequest>>>(
-      '/jobs/my',
-      { params },
-    );
-    return response.data.data;
+  // Uses GET /api/jobs — backend filters by role automatically
+  getMyJobs: async (params?: { page?: number; limit?: number; status?: string }): Promise<PaginatedResponse<ServiceRequest>> => {
+    const response = await api.get<any>('/jobs', { params });
+    const raw = response.data;
+    if (raw.data && Array.isArray(raw.data)) {
+      return { data: raw.data, total: raw.total, page: raw.page, limit: raw.limit, hasMore: raw.hasMore };
+    }
+    return raw.data;
   },
 };
