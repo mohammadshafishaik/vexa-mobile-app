@@ -9,6 +9,8 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  Image,
 } from 'react-native';
 import Animated, {
   FadeInDown,
@@ -35,6 +37,8 @@ import { formatCurrency } from '../../utils/helpers';
 import { bidService } from '../../services/bids';
 import { socketService } from '../../services/socket';
 import { SOCKET_EVENTS } from '../../utils/constants';
+import api from '../../services/api';
+import { resolveImageUrl } from '../../utils/image';
 
 type LiveBiddingRoute = RouteProp<CustomerStackParamList, 'LiveBidding'>;
 
@@ -46,11 +50,13 @@ const LiveBiddingScreen: React.FC = () => {
   const setBids = useJobStore((s) => s.setBids);
   const addBid = useJobStore((s) => s.addBid);
   const selectedJob = useJobStore((s) => s.selectedJob);
+  const [jobDetails, setJobDetails] = useState<any>(selectedJob);
   const [isLoading, setIsLoading] = useState(true);
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
 
   const user = useAuthStore((s) => s.user);
   const isProvider = user?.role === UserRole.PROVIDER;
+  const activeJob = jobDetails || selectedJob;
 
   // Provider Bid Modal State
   const [isBidModalVisible, setIsBidModalVisible] = useState(false);
@@ -82,11 +88,19 @@ const LiveBiddingScreen: React.FC = () => {
       const loadBids = async () => {
         try {
           setIsLoading(true);
-          const response = await bidService.getBidsForJob(jobId);
+          const [response, jobResponse] = await Promise.all([
+            bidService.getBidsForJob(jobId),
+            api.get(`/jobs/${jobId}`),
+          ]);
+
           if (isActive) {
             // The response is the bids array directly from { success, data: bids }
             const bidsData = Array.isArray(response) ? response : (response as any)?.data || [];
             setBids(bidsData);
+
+            if (jobResponse.data?.success) {
+              setJobDetails(jobResponse.data.data);
+            }
           }
         } catch (err: any) {
           console.error('[LiveBidding] Failed to load bids:', err);
@@ -127,7 +141,6 @@ const LiveBiddingScreen: React.FC = () => {
             setAcceptingBidId(bid.id);
             try {
               // Call the backend to accept the bid
-              const api = (await import('../../services/api')).default;
               await api.post(`/bids/${bid.id}/accept`);
               Alert.alert('Success', 'Bid accepted! The provider has been notified.');
               navigation.goBack();
@@ -231,7 +244,7 @@ const LiveBiddingScreen: React.FC = () => {
       <Animated.View entering={FadeInDown.duration(400)}>
         <GlassCard style={styles.jobSummary}>
           <Text style={styles.jobTitle} numberOfLines={1}>
-            {selectedJob?.title ?? 'Service Request'}
+            {activeJob?.title ?? 'Service Request'}
           </Text>
           <View style={styles.jobStats}>
             <View style={styles.statItem}>
@@ -241,10 +254,29 @@ const LiveBiddingScreen: React.FC = () => {
             <View style={styles.statItem}>
               <TrendingUp size={16} color={colors.gray400} />
               <Text style={styles.statText}>
-                Budget: {formatCurrency(selectedJob?.originalPrice ?? 0)}
+                Budget: {formatCurrency(activeJob?.originalPrice ?? 0)}
               </Text>
             </View>
           </View>
+
+          {activeJob?.images?.length > 0 && (
+            <View style={styles.photosSection}>
+              <Text style={styles.photosTitle}>Problem Photos</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {activeJob.images.map((uri: string, index: number) => {
+                  const imageUri = resolveImageUrl(uri);
+                  if (!imageUri) return null;
+                  return (
+                    <Image
+                      key={`${imageUri}-${index}`}
+                      source={{ uri: imageUri }}
+                      style={styles.photoThumb}
+                    />
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
         </GlassCard>
       </Animated.View>
 
@@ -375,6 +407,22 @@ const styles = StyleSheet.create({
   },
   jobSummary: {
     marginBottom: spacing[4],
+  },
+  photosSection: {
+    marginTop: spacing[3],
+  },
+  photosTitle: {
+    ...typography.caption,
+    color: colors.gray500,
+    textTransform: 'uppercase',
+    marginBottom: spacing[2],
+  },
+  photoThumb: {
+    width: 110,
+    height: 82,
+    borderRadius: borderRadius.md,
+    marginRight: spacing[2],
+    backgroundColor: colors.gray800,
   },
   jobTitle: {
     fontFamily: fontFamilies.semibold,

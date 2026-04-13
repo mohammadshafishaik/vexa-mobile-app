@@ -40,6 +40,7 @@ import { JobStatus, CustomerStackParamList, ServiceRequest } from '../../types';
 import { formatCurrency, formatRelativeTime } from '../../utils/helpers';
 import { jobService } from '../../services/jobs';
 import api from '../../services/api';
+import { resolveImageUrl } from '../../utils/image';
 
 type JobDetailRoute = RouteProp<CustomerStackParamList, 'JobDetail'>;
 
@@ -264,9 +265,11 @@ const JobDetailScreen: React.FC = () => {
           <Animated.View entering={FadeInDown.delay(220).duration(400)}>
             <Text style={styles.sectionTitle}>Problem Photos</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
-              {job.images.map((img, i) => (
-                <Image key={i} source={{ uri: img }} style={styles.thumbnail} />
-              ))}
+              {job.images.map((img, i) => {
+                const uri = resolveImageUrl(img);
+                if (!uri) return null;
+                return <Image key={`${uri}-${i}`} source={{ uri }} style={styles.thumbnail} />;
+              })}
             </ScrollView>
           </Animated.View>
         )}
@@ -276,9 +279,11 @@ const JobDetailScreen: React.FC = () => {
           <Animated.View entering={FadeInDown.delay(230).duration(400)}>
             <Text style={styles.sectionTitle}>Completion Photos</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
-              {job.completedImages.map((img, i) => (
-                <Image key={i} source={{ uri: img }} style={styles.thumbnail} />
-              ))}
+              {job.completedImages.map((img, i) => {
+                const uri = resolveImageUrl(img);
+                if (!uri) return null;
+                return <Image key={`${uri}-${i}`} source={{ uri }} style={styles.thumbnail} />;
+              })}
             </ScrollView>
           </Animated.View>
         )}

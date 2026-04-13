@@ -6,6 +6,19 @@ import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
+const normalizeBaseUrl = (value: string): string => value.trim().replace(/\/+$/, '');
+
+const getPublicBaseUrl = (req: Request): string => {
+  const configured = normalizeBaseUrl(process.env.BETTER_AUTH_URL || process.env.BASE_URL || '');
+  if (configured) return configured;
+
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || req.protocol || 'http';
+  const host = forwardedHost || req.get('host') || `localhost:${process.env.PORT || 3000}`;
+  return `${protocol}://${host}`;
+};
+
 // Configure Cloudinary if credentials are provided
 const useCloudinary = !!(
   process.env.CLOUDINARY_CLOUD_NAME &&
@@ -70,8 +83,8 @@ router.post('/', authMiddleware, upload.single('image'), async (req: Request, re
       fileUrl = result.secure_url;
     } else {
       // Use local storage URL
-      const host = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-      fileUrl = `${host}/uploads/${req.file.filename}`;
+      const publicBaseUrl = getPublicBaseUrl(req);
+      fileUrl = `${publicBaseUrl}/uploads/${req.file.filename}`;
     }
 
     res.status(201).json({
@@ -100,8 +113,8 @@ router.post('/multiple', authMiddleware, upload.array('images', 10), async (req:
         });
         return result.secure_url;
       } else {
-        const host = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-        return `${host}/uploads/${file.filename}`;
+        const publicBaseUrl = getPublicBaseUrl(req);
+        return `${publicBaseUrl}/uploads/${file.filename}`;
       }
     });
 

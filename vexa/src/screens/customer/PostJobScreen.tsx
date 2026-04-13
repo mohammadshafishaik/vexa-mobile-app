@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  PermissionsAndroid,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
@@ -62,7 +63,39 @@ const PostJobScreen: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
 
-  const handleGetLocation = () => {
+  const requestLocationPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'ios') {
+      if (typeof Geolocation.requestAuthorization === 'function') {
+        Geolocation.requestAuthorization('whenInUse');
+      }
+      return true;
+    }
+
+    try {
+      const fineLocationPermission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+      const alreadyGranted = await PermissionsAndroid.check(fineLocationPermission);
+      if (alreadyGranted) return true;
+
+      const granted = await PermissionsAndroid.request(fineLocationPermission, {
+        title: 'Allow Location Access',
+        message: 'Vexa needs your location to auto-fill your service address using GPS.',
+        buttonPositive: 'Allow',
+        buttonNegative: 'Deny',
+      });
+
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleGetLocation = async () => {
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) {
+      Alert.alert('Permission Required', 'Location permission is needed to use GPS. Please allow it in app settings.');
+      return;
+    }
+
     setIsGettingLocation(true);
     Geolocation.getCurrentPosition(
       (position) => {
