@@ -1,21 +1,44 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from 'axios';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import { useAuthStore } from '../store/useAuthStore';
 
-// ─── PRODUCTION CONFIGURATION ───────────────────────────────────
-// TODO: Replace with your Render.com backend URL after deployment
-const PRODUCTION_URL = 'https://your-backend-url.onrender.com/api';
+const PRODUCTION_BACKEND_URL = 'https://vexa-backend-hx9v.onrender.com';
 
-// ─── DEVELOPMENT CONFIGURATION ──────────────────────────────────
-const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-const DEVELOPMENT_URL = `http://${HOST}:3000/api`;
+type RuntimeEnv = {
+  API_BASE_URL?: string;
+  BACKEND_URL?: string;
+};
 
-// ─── SWITCH BETWEEN DEVELOPMENT AND PRODUCTION ──────────────────
-// Set to true for production, false for local development
-const USE_PRODUCTION = false;
+const runtimeEnv: RuntimeEnv =
+  ((globalThis as { process?: { env?: RuntimeEnv } }).process?.env ?? {});
 
-const BASE_URL = USE_PRODUCTION ? PRODUCTION_URL : DEVELOPMENT_URL;
+const normalizeUrl = (value: string): string => value.trim().replace(/\/+$/, '');
 
+const resolveDevHost = (): string => {
+  const scriptURL: string | undefined = NativeModules.SourceCode?.scriptURL;
+  if (scriptURL) {
+    const host = scriptURL.replace(/^https?:\/\//, '').split(':')[0];
+    if (host) {
+      return host;
+    }
+  }
+
+  return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+};
+
+const configuredApiBaseUrl = normalizeUrl(runtimeEnv.API_BASE_URL || '');
+const configuredBackendUrl = normalizeUrl(runtimeEnv.BACKEND_URL || '');
+const defaultBackendUrl = __DEV__
+  ? `http://${resolveDevHost()}:3000`
+  : PRODUCTION_BACKEND_URL;
+
+// Export BACKEND_URL for better-auth and Socket.io clients (without /api suffix).
+export const BACKEND_URL = configuredBackendUrl
+  || (configuredApiBaseUrl
+    ? configuredApiBaseUrl.replace(/\/api\/?$/, '')
+    : defaultBackendUrl);
+
+const BASE_URL = configuredApiBaseUrl || `${BACKEND_URL}/api`;
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,

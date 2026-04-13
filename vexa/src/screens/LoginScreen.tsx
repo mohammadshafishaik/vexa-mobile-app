@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -13,7 +12,7 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { ArrowRight, Shield, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
+import { Shield, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import ScreenContainer from '../components/layout/ScreenContainer';
 import Button from '../components/ui/Button';
 import GlassCard from '../components/ui/GlassCard';
@@ -28,8 +27,10 @@ import api from '../services/api';
 
 type LoginNav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
+const GOOGLE_WEB_CLIENT_ID = '822068169297-l8hm8rib8fq8rg9tap4fmkmtcii20daq.apps.googleusercontent.com';
+
 GoogleSignin.configure({
-  webClientId: '822068169297-l8hm8rib8fq8rg9tap4fmkmtcii20daq.apps.googleusercontent.com',
+  webClientId: GOOGLE_WEB_CLIENT_ID,
   offlineAccess: true,
 });
 
@@ -78,10 +79,19 @@ const LoginScreen: React.FC = () => {
         setGeneralError(response.data.message || 'Login failed');
       }
     } catch (error: any) {
-      const msg =
-        error?.response?.data?.message ||
-        error.message ||
-        'Login failed. Please check your credentials.';
+      const rawMessage = String(error?.message || '').toLowerCase();
+      const isNetworkError =
+        error?.code === 'ERR_NETWORK'
+        || rawMessage.includes('network error')
+        || (!error?.response && !error?.request);
+      const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+      const msg = isNetworkError
+        ? 'Unable to reach server. Check internet connection and backend URL.'
+        : isTimeout
+        ? 'Server is waking up (free tier). Please wait 60 seconds and try again.'
+        : error?.response?.data?.message ||
+          error.message ||
+          'Login failed. Please check your credentials.';
       setGeneralError(msg);
     } finally {
       setIsLoading(false);
@@ -89,24 +99,25 @@ const LoginScreen: React.FC = () => {
   };
 
   const handleGoogleSignIn = async () => {
+    setGeneralError(null);
+    setIsLoading(true);
+
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
       const idToken = userInfo.data?.idToken;
-
-      setIsLoading(true);
-      const email = userInfo.data?.user?.email;
+      const googleEmail = userInfo.data?.user?.email;
       const name = userInfo.data?.user?.name;
       const photoUrl = userInfo.data?.user?.photo;
       const googleId = userInfo.data?.user?.id;
 
-      if (!idToken || !email || !googleId) {
+      if (!idToken || !googleEmail || !googleId) {
         throw new Error('Incomplete data from Google');
       }
 
       const response = await api.post('/custom-auth/google', {
         idToken,
-        email,
+        email: googleEmail,
         name,
         photoUrl,
         googleId,
@@ -119,14 +130,25 @@ const LoginScreen: React.FC = () => {
         setGeneralError(response.data.message || 'Google Sign-In failed');
       }
     } catch (error: any) {
+      const rawMessage = String(error?.message || '');
+      const lowerMessage = rawMessage.toLowerCase();
+
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // user cancelled the login flow
+        // User cancelled the sign-in flow.
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        // operation (e.g. sign in) is in progress already
+        setGeneralError('Google Sign-In is already in progress. Please wait.');
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        setGeneralError('Play services not available');
+        setGeneralError('Google Play Services is not available or outdated on this device.');
+      } else if (lowerMessage.includes('developer_error')) {
+        setGeneralError(
+          'Google Sign-In is not configured for this app signature yet. Add debug/release SHA-1 and SHA-256 in Firebase, download updated google-services.json, and rebuild the APK.',
+        );
+      } else if (error?.code === 'ERR_NETWORK' || lowerMessage.includes('network error')) {
+        setGeneralError('Google account selected, but server is unreachable. Check backend URL and internet connection.');
       } else {
-        console.error('Google Sign-In error:', error);
+        if (__DEV__) {
+          console.warn('[Auth] Google Sign-In error:', error);
+        }
         setGeneralError('Google Sign-In failed');
       }
     } finally {
