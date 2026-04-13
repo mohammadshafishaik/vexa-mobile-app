@@ -70,9 +70,13 @@ const createUserCompat = async (data: {
       throw error;
     }
 
+    const fallbackId = uuidv4();
+    const now = new Date();
+
     await prisma.$executeRaw`
-      INSERT INTO users (email, name, phone, role, password, "googleId", "avatarUrl", "isVerified")
+      INSERT INTO users (id, email, name, phone, role, password, "googleId", "avatarUrl", "isVerified", "createdAt", "updatedAt")
       VALUES (
+        ${fallbackId},
         ${data.email},
         ${data.name},
         ${data.phone ?? null},
@@ -80,12 +84,14 @@ const createUserCompat = async (data: {
         ${data.password ?? null},
         ${data.googleId ?? null},
         ${data.avatarUrl ?? null},
-        ${data.isVerified ?? true}
+        ${data.isVerified ?? true},
+        ${now},
+        ${now}
       )
     `;
 
     const createdUser = await prisma.user.findUnique({
-      where: { email: data.email },
+      where: { id: fallbackId },
       select: authUserSelect,
     });
 
