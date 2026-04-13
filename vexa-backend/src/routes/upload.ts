@@ -8,10 +8,15 @@ import { authMiddleware } from '../middleware/auth';
 const router = Router();
 
 const normalizeBaseUrl = (value: string): string => value.trim().replace(/\/+$/, '');
+const stripApiSuffix = (value: string): string => value.replace(/\/api\/?$/i, '');
+const LOCAL_BASE_URL_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.0\.2\.2)(:\d+)?(\/|$)/i;
 
 const getPublicBaseUrl = (req: Request): string => {
-  const configured = normalizeBaseUrl(process.env.BETTER_AUTH_URL || process.env.BASE_URL || '');
-  if (configured) return configured;
+  const configuredRaw = normalizeBaseUrl(process.env.BETTER_AUTH_URL || process.env.BASE_URL || '');
+  const configured = stripApiSuffix(configuredRaw);
+  if (configured && !LOCAL_BASE_URL_PATTERN.test(configured)) {
+    return configured;
+  }
 
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
   const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();

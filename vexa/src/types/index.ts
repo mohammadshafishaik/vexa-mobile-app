@@ -96,6 +96,8 @@ export interface ServiceRequest {
   selectedProvider?: User;
   bids?: Bid[];
   modifications?: JobModification[];
+  payments?: Payment[];
+  ratings?: Rating[];
   maxModifications: number;
   modificationCount: number;
   createdAt: string;

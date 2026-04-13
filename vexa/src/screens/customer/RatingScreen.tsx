@@ -44,6 +44,13 @@ const RatingScreen: React.FC = () => {
     const fetchJob = async () => {
       try {
         const job = await jobService.getJobById(jobId);
+        const existingRating = job.ratings?.find((r) => r.raterId === currentUser?.id);
+        if (existingRating) {
+          setAlreadyRated(true);
+          setRating(existingRating.score);
+          setReview(existingRating.review || '');
+        }
+
         if (isProvider) {
           // Provider rates the customer
           setRateeId(job.customerId);
@@ -64,7 +71,7 @@ const RatingScreen: React.FC = () => {
       }
     };
     fetchJob();
-  }, [jobId, isProvider]);
+  }, [jobId, isProvider, currentUser?.id]);
 
   // Listen for real-time rating events
   useEffect(() => {

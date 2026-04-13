@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,18 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Image,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import {
   ChevronLeft,
   Camera,
   DollarSign,
   AlertTriangle,
+  X,
 } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import Button from '../../components/ui/Button';
@@ -27,37 +31,115 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { ProviderStackParamList } from '../../types';
 import { JOB_LIMITS } from '../../utils/constants';
 import { formatCurrency, isPriceIncreaseValid } from '../../utils/helpers';
+import { jobService } from '../../services/jobs';
+import { uploadService } from '../../services/upload';
 
 type ModRoute = RouteProp<ProviderStackParamList, 'ModificationRequest'>;
 
 const ModificationRequestScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<ModRoute>();
   const { jobId } = route.params;
 
   const [reason, setReason] = useState('');
   const [revisedPrice, setRevisedPrice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingJob, setIsLoadingJob] = useState(true);
+  const [jobTitle, setJobTitle] = useState('');
+  const [originalPrice, setOriginalPrice] = useState(0);
+  const [modificationCount, setModificationCount] = useState(0);
+  const [maxModifications, setMaxModifications] = useState<number>(JOB_LIMITS.MAX_MODIFICATIONS_PER_JOB);
+  const [images, setImages] = useState<string[]>([]);
 
-  // Will fetch from store/API in Phase 3
-  const originalPrice = 2500;
-  const maxIncrease = JOB_LIMITS.MAX_PRICE_INCREASE_PERCENT;
+  useEffect(() => {
+    const fetchJob = async () => {
+      try {
+        const job = await jobService.getJobById(jobId);
+        const basePrice = job.revisedPrice ?? job.originalPrice;
+        setJobTitle(job.title);
+        setOriginalPrice(basePrice);
+        setRevisedPrice(String(basePrice));
+        setModificationCount(job.modificationCount || 0);
+        setMaxModifications(job.maxModifications || JOB_LIMITS.MAX_MODIFICATIONS_PER_JOB);
+      } catch (error: any) {
+        Alert.alert('Error', error?.response?.data?.message || 'Failed to load job details');
+      } finally {
+        setIsLoadingJob(false);
+      }
+    };
 
-  const parsedPrice = parseFloat(revisedPrice) || 0;
-  const isPriceValid = parsedPrice > 0 && isPriceIncreaseValid(
+    fetchJob();
+  }, [jobId]);
+
+  const parsedPrice = useMemo(() => parseFloat(revisedPrice) || 0, [revisedPrice]);
+  const hasModificationsLeft = modificationCount < maxModifications;
+  const isPriceValid = parsedPrice > originalPrice && isPriceIncreaseValid(
     originalPrice,
     parsedPrice,
-    maxIncrease,
+    JOB_LIMITS.MAX_PRICE_INCREASE_PERCENT,
   );
 
-  const handleSubmit = () => {
-    if (!reason.trim() || !isPriceValid) return;
+  const handlePickImages = async () => {
+    const remaining = JOB_LIMITS.MAX_IMAGES_PER_MODIFICATION - images.length;
+    if (remaining <= 0) {
+      Alert.alert('Limit reached', `You can upload up to ${JOB_LIMITS.MAX_IMAGES_PER_MODIFICATION} photos.`);
+      return;
+    }
+
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      selectionLimit: remaining,
+    });
+
+    if (result.assets?.length) {
+      const newUris = result.assets.map((asset) => asset.uri).filter(Boolean) as string[];
+      setImages((prev) => [...prev, ...newUris]);
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async () => {
+    if (!reason.trim()) {
+      Alert.alert('Required', 'Please provide a reason for the revision.');
+      return;
+    }
+
+    if (!isPriceValid) {
+      Alert.alert('Invalid revised price', `Please enter a revised price within ${JOB_LIMITS.MAX_PRICE_INCREASE_PERCENT}% of the current amount.`);
+      return;
+    }
+
+    if (!hasModificationsLeft) {
+      Alert.alert('Limit reached', 'No more modification requests are allowed for this job.');
+      return;
+    }
+
     setIsSubmitting(true);
-    // Will connect to API in Phase 3
-    setTimeout(() => {
+    try {
+      let revisionImages: string[] = [];
+      if (images.length > 0) {
+        revisionImages = await uploadService.uploadMultipleImages(images);
+      }
+
+      await jobService.submitModification(jobId, {
+        revisionReason: reason.trim(),
+        revisedPrice: parsedPrice,
+        revisionImages,
+      });
+
+      Alert.alert(
+        'Request submitted',
+        'Your revised quote has been sent to the customer for approval.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to submit modification request');
+    } finally {
       setIsSubmitting(false);
-      navigation.goBack();
-    }, 1500);
+    }
   };
 
   return (
@@ -66,7 +148,6 @@ const ModificationRequestScreen: React.FC = () => {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -78,43 +159,35 @@ const ModificationRequestScreen: React.FC = () => {
           <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Warning */}
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Animated.View entering={FadeInDown.delay(100).duration(400)}>
             <GlassCard style={styles.warningCard}>
               <View style={styles.warningRow}>
                 <AlertTriangle size={18} color={colors.warning} />
                 <Text style={styles.warningText}>
-                  Modifications are limited to {JOB_LIMITS.MAX_MODIFICATIONS_PER_JOB} per
-                  job. Price increases cannot exceed {maxIncrease}% of the original price.
+                  Modifications used: {modificationCount}/{maxModifications}. Revised price must be above current amount and within {JOB_LIMITS.MAX_PRICE_INCREASE_PERCENT}% increase.
                 </Text>
               </View>
             </GlassCard>
           </Animated.View>
 
-          {/* Original Price */}
           <Animated.View entering={FadeInDown.delay(150).duration(400)}>
             <GlassCard style={styles.priceCard}>
-              <Text style={styles.priceLabel}>Original Price</Text>
-              <Text style={styles.priceValue}>
-                {formatCurrency(originalPrice)}
-              </Text>
+              <Text style={styles.jobTitle}>{jobTitle || 'Service Job'}</Text>
+              <Text style={styles.priceLabel}>Current agreed amount</Text>
+              <Text style={styles.priceValue}>{formatCurrency(originalPrice)}</Text>
               <Text style={styles.maxLabel}>
-                Max allowed: {formatCurrency(originalPrice * (1 + maxIncrease / 100))}
+                Max revised amount: {formatCurrency(originalPrice * (1 + JOB_LIMITS.MAX_PRICE_INCREASE_PERCENT / 100))}
               </Text>
             </GlassCard>
           </Animated.View>
 
-          {/* Reason */}
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            <Text style={styles.label}>REASON FOR MODIFICATION</Text>
+            <Text style={styles.label}>REASON FOR REVISION</Text>
             <View style={styles.textAreaWrapper}>
               <TextInput
                 style={styles.textArea}
-                placeholder="Explain why this modification is needed..."
+                placeholder="Explain what additional work is required..."
                 placeholderTextColor={colors.gray500}
                 value={reason}
                 onChangeText={setReason}
@@ -125,44 +198,55 @@ const ModificationRequestScreen: React.FC = () => {
             </View>
           </Animated.View>
 
-          {/* Revised Price */}
           <Animated.View entering={FadeInDown.delay(250).duration(400)}>
             <Input
               label="Revised Price (₹)"
-              placeholder="Enter revised price"
+              placeholder="Enter revised amount"
               value={revisedPrice}
               onChangeText={setRevisedPrice}
               keyboardType="numeric"
               icon={<DollarSign size={18} color={colors.gray500} />}
               error={
-                parsedPrice > 0 && !isPriceValid
-                  ? `Price cannot exceed ${maxIncrease}% increase`
+                revisedPrice.length > 0 && !isPriceValid
+                  ? `Must be greater than current and within ${JOB_LIMITS.MAX_PRICE_INCREASE_PERCENT}% increase`
                   : undefined
               }
             />
           </Animated.View>
 
-          {/* Photos */}
           <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-            <Text style={styles.label}>EVIDENCE PHOTOS</Text>
-            <TouchableOpacity style={styles.photoUpload} activeOpacity={0.7}>
-              <Camera size={24} color={colors.gray500} />
-              <Text style={styles.photoText}>
-                Add photos to support your request
-              </Text>
-            </TouchableOpacity>
+            <Text style={styles.label}>EVIDENCE PHOTOS ({images.length}/{JOB_LIMITS.MAX_IMAGES_PER_MODIFICATION})</Text>
+
+            {images.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewRow}>
+                {images.map((uri, index) => (
+                  <View key={`${uri}-${index}`} style={styles.previewWrap}>
+                    <Image source={{ uri }} style={styles.previewImage} />
+                    <TouchableOpacity style={styles.removeBtn} onPress={() => handleRemoveImage(index)}>
+                      <X size={14} color={colors.white} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            {images.length < JOB_LIMITS.MAX_IMAGES_PER_MODIFICATION && (
+              <TouchableOpacity style={styles.photoUpload} activeOpacity={0.7} onPress={handlePickImages}>
+                <Camera size={24} color={colors.gray500} />
+                <Text style={styles.photoText}>Add supporting photos</Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
 
-          {/* Submit */}
           <Animated.View entering={FadeInDown.delay(350).duration(400)}>
             <Button
-              title="Submit Modification Request"
+              title="Submit Revision Request"
               onPress={handleSubmit}
               variant="primary"
               size="lg"
               fullWidth
-              loading={isSubmitting}
-              disabled={!reason.trim() || !isPriceValid}
+              loading={isSubmitting || isLoadingJob}
+              disabled={isLoadingJob || isSubmitting || !hasModificationsLeft || !reason.trim() || !isPriceValid}
               style={{ marginTop: spacing[4] }}
             />
           </Animated.View>
@@ -206,6 +290,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing[5],
   },
+  jobTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.white,
+    marginBottom: spacing[2],
+    textAlign: 'center',
+  },
   priceLabel: {
     ...typography.caption,
     color: colors.gray500,
@@ -241,6 +332,30 @@ const styles = StyleSheet.create({
     color: colors.white,
     padding: spacing[4],
     minHeight: 100,
+  },
+  previewRow: {
+    marginBottom: spacing[3],
+  },
+  previewWrap: {
+    marginRight: spacing[2],
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  previewImage: {
+    width: 90,
+    height: 90,
+  },
+  removeBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   photoUpload: {
     height: 100,

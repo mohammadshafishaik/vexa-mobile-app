@@ -57,6 +57,14 @@ const JobDetailScreen: React.FC = () => {
   const isProvider = currentUser?.role === 'PROVIDER';
   const isCustomer = currentUser?.role === 'CUSTOMER';
   const isAssignedProvider = job?.selectedProviderId === currentUser?.id;
+  const hasCurrentUserRated = !!job?.ratings?.some((r) => r.raterId === currentUser?.id);
+  const pendingModification = job?.modifications?.find((m) => m.approvalStatus === 'PENDING') || job?.modifications?.[0];
+  const canRequestModification = !!(
+    isAssignedProvider
+    && job
+    && ['ACCEPTED', 'IN_PROGRESS', 'ON_SITE_INSPECTION'].includes(job.status)
+    && job.modificationCount < job.maxModifications
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -92,12 +100,16 @@ const JobDetailScreen: React.FC = () => {
   };
 
   const handleViewModification = () => {
-    if (job?.modifications?.[0]) {
+    if (pendingModification) {
       navigation.navigate('RevisionApproval', {
         jobId,
-        modificationId: job.modifications[0].id,
+        modificationId: pendingModification.id,
       });
     }
+  };
+
+  const handleRequestModification = () => {
+    navigation.navigate('ModificationRequest', { jobId });
   };
 
   // Provider marks work as complete
@@ -385,6 +397,29 @@ const JobDetailScreen: React.FC = () => {
             </GlassCard>
           )}
 
+          {/* Provider can request a revised price after inspection */}
+          {canRequestModification && (
+            <Button
+              title="Request Price Revision"
+              onPress={handleRequestModification}
+              variant="secondary"
+              size="lg"
+              fullWidth
+              icon={<AlertCircle size={18} color={colors.white} />}
+            />
+          )}
+
+          {job?.status === JobStatus.MODIFICATION_REQUESTED && isAssignedProvider && (
+            <GlassCard style={styles.waitingCard}>
+              <View style={styles.waitingRow}>
+                <Clock size={20} color={colors.warning} />
+                <Text style={styles.waitingText}>
+                  Waiting for customer approval on your revised quote.
+                </Text>
+              </View>
+            </GlassCard>
+          )}
+
           {job?.status === JobStatus.MODIFICATION_REQUESTED && (
             <Button
               title="Review Modification"
@@ -421,7 +456,7 @@ const JobDetailScreen: React.FC = () => {
           )}
 
           {/* PAID: Both can rate */}
-          {job?.status === JobStatus.PAID && (
+          {job?.status === JobStatus.PAID && !hasCurrentUserRated && (
             <Button
               title={isProvider ? 'Rate Customer' : 'Rate Provider'}
               onPress={handleRate}
@@ -430,6 +465,17 @@ const JobDetailScreen: React.FC = () => {
               fullWidth
               icon={<Star size={18} color={colors.black} />}
             />
+          )}
+
+          {job?.status === JobStatus.PAID && hasCurrentUserRated && (
+            <GlassCard style={styles.waitingCard}>
+              <View style={styles.waitingRow}>
+                <CheckCircle size={20} color={colors.success} />
+                <Text style={[styles.waitingText, { color: colors.success }]}>
+                  Your rating is already submitted.
+                </Text>
+              </View>
+            </GlassCard>
           )}
 
           {/* Contact Support — always visible */}

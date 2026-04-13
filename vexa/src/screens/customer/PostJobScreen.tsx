@@ -63,6 +63,48 @@ const PostJobScreen: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
 
+  const resolveAreaFromCoordinates = async (lat: number, lng: number): Promise<string | null> => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+        {
+          headers: {
+            Accept: 'application/json',
+          },
+        },
+      );
+
+      if (!response.ok) return null;
+
+      const payload = await response.json();
+      const address = payload?.address || {};
+      const area = address.suburb
+        || address.neighbourhood
+        || address.village
+        || address.town
+        || address.city_district
+        || address.city
+        || address.county;
+      const region = address.state_district || address.state;
+
+      const compact = [area, region].filter(Boolean).join(', ');
+      if (compact) return compact;
+
+      if (payload?.display_name) {
+        return String(payload.display_name)
+          .split(',')
+          .slice(0, 3)
+          .map((part: string) => part.trim())
+          .filter(Boolean)
+          .join(', ');
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   const requestLocationPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') {
       if (typeof Geolocation.requestAuthorization === 'function') {
@@ -98,9 +140,13 @@ const PostJobScreen: React.FC = () => {
 
     setIsGettingLocation(true);
     Geolocation.getCurrentPosition(
-      (position) => {
-        setCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
-        setLocation(`${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setCoords({ lat, lng });
+
+        const resolvedArea = await resolveAreaFromCoordinates(lat, lng);
+        setLocation(resolvedArea || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
         setIsGettingLocation(false);
       },
       (error) => {

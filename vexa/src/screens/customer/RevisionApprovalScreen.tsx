@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -18,49 +20,113 @@ import {
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
 import Button from '../../components/ui/Button';
-import Avatar from '../../components/ui/Avatar';
 import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
-import { CustomerStackParamList } from '../../types';
+import { CustomerStackParamList, JobModification } from '../../types';
 import { formatCurrency } from '../../utils/helpers';
+import { jobService } from '../../services/jobs';
+import { resolveImageUrl } from '../../utils/image';
 
 type RevisionRoute = RouteProp<CustomerStackParamList, 'RevisionApproval'>;
 
 const RevisionApprovalScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<RevisionRoute>();
   const { jobId, modificationId } = route.params;
 
-  // Will fetch real data from store/API in Phase 3
-  const modification = {
-    providerName: 'Service Provider',
-    revisionReason:
-      'After inspecting the site, additional plumbing work is required. The existing pipes need replacement which was not visible before.',
-    originalPrice: 2500,
-    revisedPrice: 3200,
-    revisionImages: [] as string[],
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [providerName, setProviderName] = useState('Service Provider');
+  const [modification, setModification] = useState<JobModification | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const job = await jobService.getJobById(jobId);
+        if (job.selectedProvider?.name) {
+          setProviderName(job.selectedProvider.name);
+        }
+
+        const found = job.modifications?.find((m) => m.id === modificationId) || null;
+        setModification(found);
+      } catch (error: any) {
+        Alert.alert('Error', error?.response?.data?.message || 'Failed to load revision request');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [jobId, modificationId]);
+
+  const priceIncreasePercent = useMemo(() => {
+    if (!modification || modification.originalPrice <= 0) return 0;
+    return Math.round(((modification.revisedPrice - modification.originalPrice) / modification.originalPrice) * 100);
+  }, [modification]);
+
+  const handleRespond = async (approved: boolean) => {
+    if (!modification) return;
+
+    setIsSubmitting(true);
+    try {
+      await jobService.respondToModification(jobId, modification.id, { approved });
+      Alert.alert(
+        approved ? 'Revision Approved' : 'Revision Rejected',
+        approved
+          ? 'The revised price has been accepted and the job is back in progress.'
+          : 'The revised price has been rejected and the job continues at the previous amount.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to submit your response');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const priceIncreasePercent = Math.round(
-    ((modification.revisedPrice - modification.originalPrice) /
-      modification.originalPrice) *
-      100,
-  );
+  if (isLoading) {
+    return (
+      <ScreenContainer>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+          >
+            <ChevronLeft size={24} color={colors.white} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Revision Request</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ActivityIndicator color={colors.white} style={{ flex: 1 }} />
+      </ScreenContainer>
+    );
+  }
 
-  const handleApprove = () => {
-    // Will connect to API in Phase 3
-    navigation.goBack();
-  };
+  if (!modification) {
+    return (
+      <ScreenContainer>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+          >
+            <ChevronLeft size={24} color={colors.white} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Revision Request</Text>
+          <View style={{ width: 24 }} />
+        </View>
 
-  const handleReject = () => {
-    // Will connect to API in Phase 3
-    navigation.goBack();
-  };
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Request not found</Text>
+          <Text style={styles.emptyText}>This revision request no longer exists or has already been resolved.</Text>
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -72,79 +138,79 @@ const RevisionApprovalScreen: React.FC = () => {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Warning Banner */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <GlassCard style={styles.warningCard}>
             <View style={styles.warningRow}>
               <AlertTriangle size={20} color={colors.warning} />
               <Text style={styles.warningText}>
-                The provider has requested a modification to this job.
-                Review the details below.
+                {providerName} requested a price revision for additional on-site work. Review and choose whether to approve.
               </Text>
             </View>
           </GlassCard>
         </Animated.View>
 
-        {/* Reason */}
-        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+        <Animated.View entering={FadeInDown.delay(180).duration(400)}>
           <Text style={styles.sectionTitle}>Reason for Revision</Text>
           <GlassCard>
             <Text style={styles.reasonText}>{modification.revisionReason}</Text>
           </GlassCard>
         </Animated.View>
 
-        {/* Price Comparison */}
-        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+        {modification.revisionImages?.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(220).duration(400)}>
+            <Text style={styles.sectionTitle}>Evidence Photos</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
+              {modification.revisionImages.map((img, index) => {
+                const uri = resolveImageUrl(img);
+                if (!uri) return null;
+                return <Image key={`${uri}-${index}`} source={{ uri }} style={styles.thumbnail} />;
+              })}
+            </ScrollView>
+          </Animated.View>
+        )}
+
+        <Animated.View entering={FadeInDown.delay(260).duration(400)}>
           <Text style={styles.sectionTitle}>Price Change</Text>
           <GlassCard>
             <View style={styles.priceCompare}>
               <View style={styles.priceColumn}>
                 <Text style={styles.priceLabel}>Original</Text>
-                <Text style={styles.priceOriginal}>
-                  {formatCurrency(modification.originalPrice)}
-                </Text>
+                <Text style={styles.priceOriginal}>{formatCurrency(modification.originalPrice)}</Text>
               </View>
               <View style={styles.priceArrow}>
                 <Text style={styles.arrowText}>→</Text>
               </View>
               <View style={styles.priceColumn}>
                 <Text style={styles.priceLabel}>Revised</Text>
-                <Text style={styles.priceRevised}>
-                  {formatCurrency(modification.revisedPrice)}
-                </Text>
+                <Text style={styles.priceRevised}>{formatCurrency(modification.revisedPrice)}</Text>
               </View>
             </View>
             <View style={styles.percentBadge}>
-              <Text style={styles.percentText}>
-                +{priceIncreasePercent}% increase
-              </Text>
+              <Text style={styles.percentText}>+{priceIncreasePercent}% increase</Text>
             </View>
           </GlassCard>
         </Animated.View>
 
-        {/* Action Buttons */}
-        <Animated.View
-          entering={FadeInDown.delay(400).duration(400)}
-          style={styles.actions}
-        >
+        <Animated.View entering={FadeInDown.delay(320).duration(400)} style={styles.actions}>
           <Button
             title="Approve Revision"
-            onPress={handleApprove}
+            onPress={() => handleRespond(true)}
             variant="primary"
             size="lg"
             fullWidth
+            loading={isSubmitting}
+            disabled={isSubmitting}
             icon={<CheckCircle size={18} color={colors.black} />}
           />
           <Button
             title="Reject Revision"
-            onPress={handleReject}
+            onPress={() => handleRespond(false)}
             variant="danger"
             size="lg"
             fullWidth
+            loading={isSubmitting}
+            disabled={isSubmitting}
             icon={<XCircle size={18} color={colors.white} />}
           />
         </Animated.View>
@@ -195,6 +261,16 @@ const styles = StyleSheet.create({
     color: colors.gray300,
     lineHeight: 22,
   },
+  imageScroll: {
+    marginBottom: spacing[2],
+  },
+  thumbnail: {
+    width: 120,
+    height: 90,
+    borderRadius: borderRadius.md,
+    marginRight: spacing[2],
+    backgroundColor: colors.gray800,
+  },
   priceCompare: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -243,6 +319,24 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing[3],
     marginTop: spacing[6],
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[6],
+    paddingBottom: spacing[10],
+  },
+  emptyTitle: {
+    fontFamily: fontFamilies.bold,
+    fontSize: fontSizes.lg,
+    color: colors.white,
+    marginBottom: spacing[2],
+  },
+  emptyText: {
+    ...typography.body,
+    color: colors.gray500,
+    textAlign: 'center',
   },
 });
 
