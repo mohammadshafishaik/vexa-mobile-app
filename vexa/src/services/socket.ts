@@ -4,9 +4,13 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { SOCKET_EVENTS } from '../utils/constants';
 
-// Use 10.0.2.2 for Android emulator, localhost for iOS simulator
+// ─── Match the same production/dev toggle as api.ts ─────────────
+const USE_PRODUCTION = false; // set to true when deploying
+
 const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-const SOCKET_URL = `http://${HOST}:3000`;
+const SOCKET_URL = USE_PRODUCTION
+  ? 'https://your-backend-url.onrender.com'   // ← replace with your Render URL
+  : `http://${HOST}:3000`;
 
 let socket: Socket | null = null;
 

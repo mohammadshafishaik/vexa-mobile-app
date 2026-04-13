@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { WifiOff } from 'lucide-react-native';
+import { WifiOff, RefreshCw } from 'lucide-react-native';
 import ScreenContainer from '../components/layout/ScreenContainer';
 import { colors } from '../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../theme/typography';
@@ -17,8 +17,11 @@ const NoNetworkScreen: React.FC = () => {
           </View>
           <Text style={styles.title}>No Internet Connection</Text>
           <Text style={styles.subtitle}>
-            Please check your network settings and try again. VEXA requires an active internet connection to function.
+            VEXA needs an active internet connection to work. Please check your Wi-Fi or mobile data and try again.
           </Text>
+          <View style={styles.hint}>
+            <Text style={styles.hintText}>The app will reconnect automatically once your connection is restored.</Text>
+          </View>
         </Animated.View>
       </View>
     </ScreenContainer>
@@ -56,6 +59,19 @@ const styles = StyleSheet.create({
     color: colors.gray400,
     textAlign: 'center',
     lineHeight: 24,
+    marginBottom: spacing[6],
+  },
+  hint: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  hintText: {
+    ...typography.bodySmall,
+    color: colors.gray500,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 
