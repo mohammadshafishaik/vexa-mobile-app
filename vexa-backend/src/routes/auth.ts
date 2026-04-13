@@ -73,22 +73,52 @@ const createUserCompat = async (data: {
     const fallbackId = uuidv4();
     const now = new Date();
 
-    await prisma.$executeRaw`
-      INSERT INTO users (id, email, name, phone, role, password, "googleId", "avatarUrl", "isVerified", "createdAt", "updatedAt")
-      VALUES (
-        ${fallbackId},
-        ${data.email},
-        ${data.name},
-        ${data.phone ?? null},
-        ${data.role},
-        ${data.password ?? null},
-        ${data.googleId ?? null},
-        ${data.avatarUrl ?? null},
-        ${data.isVerified ?? true},
-        ${now},
-        ${now}
-      )
+    const availableColumns = await prisma.$queryRaw<Array<{ column_name: string }>>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'users'
     `;
+
+    const existingColumns = new Map(
+      availableColumns.map((col) => [col.column_name.toLowerCase(), col.column_name]),
+    );
+
+    const candidates: Array<[string, unknown]> = [
+      ['id', fallbackId],
+      ['email', data.email],
+      ['name', data.name],
+      ['phone', data.phone ?? null],
+      ['role', data.role],
+      ['password', data.password ?? null],
+      ['googleId', data.googleId ?? null],
+      ['avatarUrl', data.avatarUrl ?? null],
+      ['isVerified', data.isVerified ?? true],
+      ['createdAt', now],
+      ['updatedAt', now],
+    ];
+
+    const insertColumns: string[] = [];
+    const insertValues: unknown[] = [];
+
+    for (const [candidateName, candidateValue] of candidates) {
+      const actualColumnName = existingColumns.get(candidateName.toLowerCase());
+      if (actualColumnName) {
+        insertColumns.push(actualColumnName);
+        insertValues.push(candidateValue);
+      }
+    }
+
+    if (insertColumns.length === 0) {
+      throw error;
+    }
+
+    const columnSql = insertColumns.map((col) => `"${col}"`).join(', ');
+    const valuesSql = insertValues.map((_, index) => `$${index + 1}`).join(', ');
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "users" (${columnSql}) VALUES (${valuesSql})`,
+      ...insertValues,
+    );
 
     const createdUser = await prisma.user.findUnique({
       where: { id: fallbackId },
