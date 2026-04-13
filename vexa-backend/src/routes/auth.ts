@@ -98,7 +98,8 @@ router.post('/register', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Register error:', error);
-    res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
+    const errorCode = error?.code ? ` (${error.code})` : '';
+    res.status(500).json({ success: false, message: `Registration failed. Please try again${errorCode}.` });
   }
 });
 
@@ -157,7 +158,8 @@ router.post('/login', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Login error:', error);
-    res.status(500).json({ success: false, message: 'Login failed. Please try again.' });
+    const errorCode = error?.code ? ` (${error.code})` : '';
+    res.status(500).json({ success: false, message: `Login failed. Please try again${errorCode}.` });
   }
 });
 
@@ -225,7 +227,8 @@ router.post('/google', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Google auth error:', error);
-    res.status(500).json({ success: false, message: 'Google authentication failed' });
+    const errorCode = error?.code ? ` (${error.code})` : '';
+    res.status(500).json({ success: false, message: `Google authentication failed${errorCode}.` });
   }
 });
 
