@@ -42,6 +42,61 @@ const toPublicUser = (user: any) => ({
   updatedAt: user.updatedAt,
 });
 
+const isSchemaMismatchError = (error: any): boolean => {
+  const message = String(error?.message || '').toLowerCase();
+  return error?.code === 'P2021'
+    || error?.code === 'P2022'
+    || message.includes('column') && message.includes('does not exist')
+    || message.includes('table') && message.includes('does not exist');
+};
+
+const createUserCompat = async (data: {
+  email: string;
+  name: string;
+  phone?: string | null;
+  role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
+  password?: string | null;
+  googleId?: string | null;
+  avatarUrl?: string | null;
+  isVerified?: boolean;
+}) => {
+  try {
+    return await prisma.user.create({
+      data,
+      select: authUserSelect,
+    });
+  } catch (error: any) {
+    if (!isSchemaMismatchError(error)) {
+      throw error;
+    }
+
+    await prisma.$executeRaw`
+      INSERT INTO users (email, name, phone, role, password, "googleId", "avatarUrl", "isVerified")
+      VALUES (
+        ${data.email},
+        ${data.name},
+        ${data.phone ?? null},
+        ${data.role},
+        ${data.password ?? null},
+        ${data.googleId ?? null},
+        ${data.avatarUrl ?? null},
+        ${data.isVerified ?? true}
+      )
+    `;
+
+    const createdUser = await prisma.user.findUnique({
+      where: { email: data.email },
+      select: authUserSelect,
+    });
+
+    if (!createdUser) {
+      throw error;
+    }
+
+    return createdUser;
+  }
+};
+
 // ─── POST /api/auth/register ───────────────────────────
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -71,16 +126,13 @@ router.post('/register', async (req: Request, res: Response) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const user = await prisma.user.create({
-      data: {
-        email: email.trim().toLowerCase(),
-        name: name.trim(),
-        phone: phone ? phone.replace(/\D/g, '').slice(-10) : null,
-        role,
-        password: hashedPassword,
-        isVerified: true,
-      },
-      select: authUserSelect,
+    const user = await createUserCompat({
+      email: email.trim().toLowerCase(),
+      name: name.trim(),
+      phone: phone ? phone.replace(/\D/g, '').slice(-10) : null,
+      role,
+      password: hashedPassword,
+      isVerified: true,
     });
 
     const tokenPayload = { userId: user.id, email: user.email, role: user.role };
@@ -198,16 +250,13 @@ router.post('/google', async (req: Request, res: Response) => {
       }
     } else {
       // Create new user — will need role selection
-      user = await prisma.user.create({
-        data: {
-          email: email.trim().toLowerCase(),
-          name: name || email.split('@')[0],
-          googleId,
-          avatarUrl: photoUrl || null,
-          isVerified: true,
-          role: 'CUSTOMER', // Default, can be changed later
-        },
-        select: authUserSelect,
+      user = await createUserCompat({
+        email: email.trim().toLowerCase(),
+        name: name || email.split('@')[0],
+        googleId,
+        avatarUrl: photoUrl || null,
+        isVerified: true,
+        role: 'CUSTOMER', // Default, can be changed later
       });
     }
 
