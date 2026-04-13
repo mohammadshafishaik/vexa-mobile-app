@@ -1,5 +1,4 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from 'axios';
-import { NativeModules, Platform } from 'react-native';
 import { useAuthStore } from '../store/useAuthStore';
 
 const PRODUCTION_BACKEND_URL = 'https://vexa-backend-hx9v.onrender.com';
@@ -14,23 +13,9 @@ const runtimeEnv: RuntimeEnv =
 
 const normalizeUrl = (value: string): string => value.trim().replace(/\/+$/, '');
 
-const resolveDevHost = (): string => {
-  const scriptURL: string | undefined = NativeModules.SourceCode?.scriptURL;
-  if (scriptURL) {
-    const host = scriptURL.replace(/^https?:\/\//, '').split(':')[0];
-    if (host) {
-      return host;
-    }
-  }
-
-  return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-};
-
 const configuredApiBaseUrl = normalizeUrl(runtimeEnv.API_BASE_URL || '');
 const configuredBackendUrl = normalizeUrl(runtimeEnv.BACKEND_URL || '');
-const defaultBackendUrl = __DEV__
-  ? `http://${resolveDevHost()}:3000`
-  : PRODUCTION_BACKEND_URL;
+const defaultBackendUrl = PRODUCTION_BACKEND_URL;
 
 // Export BACKEND_URL for better-auth and Socket.io clients (without /api suffix).
 export const BACKEND_URL = configuredBackendUrl
