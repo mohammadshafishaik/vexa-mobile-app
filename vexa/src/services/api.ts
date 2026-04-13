@@ -33,6 +33,75 @@ const api: AxiosInstance = axios.create({
   },
 });
 
+const isNetworkFailure = (error: AxiosError): boolean => {
+  const msg = String(error.message || '').toLowerCase();
+  return error.code === 'ERR_NETWORK' || msg.includes('network error') || !error.response;
+};
+
+const buildRequestUrl = (config: InternalAxiosRequestConfig): string => {
+  const requestUrl = config.url || '';
+  if (/^https?:\/\//i.test(requestUrl)) {
+    return requestUrl;
+  }
+
+  const base = String(config.baseURL || BASE_URL).replace(/\/+$/, '');
+  const path = requestUrl.startsWith('/') ? requestUrl : `/${requestUrl}`;
+  return `${base}${path}`;
+};
+
+const toHeaderObject = (headers: unknown): Record<string, string> => {
+  const result: Record<string, string> = {};
+  if (!headers || typeof headers !== 'object') {
+    return result;
+  }
+
+  for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    result[key] = String(value);
+  }
+  return result;
+};
+
+const fetchWithFallback = async (
+  config: InternalAxiosRequestConfig & { _fetchFallbackAttempted?: boolean },
+) => {
+  const url = buildRequestUrl(config);
+  const method = String(config.method || 'get').toUpperCase();
+  const headers = toHeaderObject(config.headers);
+
+  let body: BodyInit | undefined;
+  if (method !== 'GET' && method !== 'HEAD' && config.data !== undefined) {
+    if (typeof config.data === 'string') {
+      body = config.data;
+    } else {
+      body = JSON.stringify(config.data);
+      if (!headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+      }
+    }
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body,
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  const data = contentType.includes('application/json')
+    ? await response.json()
+    : await response.text();
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    data,
+  };
+};
+
 // Request interceptor — attach JWT token
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -51,6 +120,7 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
+      _fetchFallbackAttempted?: boolean;
     };
 
     // If 401 and we haven't retried yet, attempt token refresh
@@ -78,6 +148,40 @@ api.interceptors.response.use(
         // Refresh failed — force logout
         useAuthStore.getState().logout();
         return Promise.reject(refreshError);
+      }
+    }
+
+    // Some Android builds intermittently throw ERR_NETWORK from Axios transport.
+    // Retry once with native fetch before surfacing a network error.
+    if (originalRequest && isNetworkFailure(error) && !originalRequest._fetchFallbackAttempted) {
+      originalRequest._fetchFallbackAttempted = true;
+
+      try {
+        const fallback = await fetchWithFallback(originalRequest);
+        if (fallback.ok) {
+          return {
+            data: fallback.data,
+            status: fallback.status,
+            statusText: fallback.statusText,
+            headers: {},
+            config: originalRequest,
+            request: undefined,
+          };
+        }
+
+        return Promise.reject({
+          ...error,
+          code: undefined,
+          response: {
+            status: fallback.status,
+            data: fallback.data,
+            headers: {},
+            config: originalRequest,
+          },
+          config: originalRequest,
+        });
+      } catch (fetchError) {
+        // Keep original Axios error if fallback also fails.
       }
     }
 
