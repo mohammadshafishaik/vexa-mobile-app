@@ -87,7 +87,8 @@ android {
     }
     signingConfigs {
         debug {
-            storeFile file('debug.keystore')
+            def globalDebugKeystore = file(System.getProperty('user.home') + '/.android/debug.keystore')
+            storeFile globalDebugKeystore.exists() ? globalDebugKeystore : file('debug.keystore')
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'

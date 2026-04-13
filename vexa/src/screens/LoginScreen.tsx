@@ -27,7 +27,7 @@ import api from '../services/api';
 
 type LoginNav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
-const GOOGLE_WEB_CLIENT_ID = '822068169297-l8hm8rib8fq8rg9tap4fmkmtcii20daq.apps.googleusercontent.com';
+const GOOGLE_WEB_CLIENT_ID = '926413154225-gu6bf8poq2i3cf0p7usr522rpdhpkkgk.apps.googleusercontent.com';
 
 GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
