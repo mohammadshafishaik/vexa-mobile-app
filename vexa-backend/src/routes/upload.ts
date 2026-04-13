@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { v2 as cloudinary } from 'cloudinary';
 import { authMiddleware } from '../middleware/auth';
 
@@ -38,9 +39,14 @@ if (useCloudinary) {
 }
 
 // Configure multer storage
+const uploadsDir = path.resolve(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -128,6 +134,13 @@ router.post('/multiple', authMiddleware, upload.array('images', 10), async (req:
     console.error('Multiple upload error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
+});
+
+router.use((error: any, _req: Request, res: Response, _next: any) => {
+  console.error('Upload middleware error:', error);
+  const message = error?.message || 'Upload failed';
+  const statusCode = error?.name === 'MulterError' ? 400 : 500;
+  res.status(statusCode).json({ success: false, message });
 });
 
 export default router;

@@ -130,13 +130,25 @@ const PostJobScreen: React.FC = () => {
     try {
       // Upload images first
       const uploadedUrls: string[] = [];
+      let failedUploads = 0;
       for (const uri of images) {
         try {
           const url = await uploadService.uploadImage(uri);
           uploadedUrls.push(url);
         } catch (e) {
-          console.error("Failed to upload image", e);
+          failedUploads += 1;
+          if (__DEV__) {
+            console.log('Failed to upload image', e);
+          }
         }
+      }
+
+      if (failedUploads > 0) {
+        Alert.alert(
+          'Image Upload Failed',
+          'One or more photos could not be uploaded. Please try again before posting the job.',
+        );
+        return;
       }
 
       const res = await api.post('/jobs', {
