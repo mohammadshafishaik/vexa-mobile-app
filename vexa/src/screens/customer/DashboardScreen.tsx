@@ -42,7 +42,9 @@ const CustomerDashboardScreen: React.FC = () => {
         setJobs(res.data.data);
       }
     } catch (error) {
-      console.error('Failed to fetch jobs:', error);
+      if (__DEV__) {
+        console.log('Failed to fetch jobs:', error);
+      }
     } finally {
       setLoading(false);
     }
