@@ -138,11 +138,12 @@ export interface Payment {
   payeeId: string;
   amount: number;
   currency: string;
+  paymentMethod?: string;
   status: PaymentStatus;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   razorpaySignature: string | null;
-  securityHash: string;
+  securityHash: string | null;
   createdAt: string;
   updatedAt: string;
 }

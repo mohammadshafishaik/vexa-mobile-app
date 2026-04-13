@@ -15,8 +15,9 @@ const getPublicBaseUrl = (req: Request): string => {
 
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
   const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
-  const protocol = forwardedProto || req.protocol || 'http';
   const host = forwardedHost || req.get('host') || `localhost:${process.env.PORT || 3000}`;
+  const inferredProtocol = host.includes('onrender.com') ? 'https' : (req.protocol || 'http');
+  const protocol = forwardedProto || inferredProtocol;
   return `${protocol}://${host}`;
 };
 

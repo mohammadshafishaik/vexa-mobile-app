@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -137,9 +137,8 @@ const ProviderDashboardScreen: React.FC = () => {
     </Animated.View>
   );
 
-  return (
-    <ScreenContainer>
-      {/* Header */}
+  const renderHeader = () => (
+    <>
       <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
         <View>
           <Text style={styles.greeting}>
@@ -156,7 +155,6 @@ const ProviderDashboardScreen: React.FC = () => {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Stats — Provider specific */}
       <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.statsRow}>
         <GlassCard style={styles.statCard}>
           <Briefcase size={18} color={colors.white} style={{ marginBottom: 4 }} />
@@ -175,7 +173,6 @@ const ProviderDashboardScreen: React.FC = () => {
         </GlassCard>
       </Animated.View>
 
-      {/* My Assigned Jobs */}
       {myJobs.length > 0 && (
         <>
           <View style={styles.sectionHeader}>
@@ -186,16 +183,20 @@ const ProviderDashboardScreen: React.FC = () => {
         </>
       )}
 
-      {/* Available Jobs */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Available Jobs</Text>
         <Text style={styles.sectionCount}>{availableJobs.length}</Text>
       </View>
+    </>
+  );
 
+  return (
+    <ScreenContainer>
       <FlatList
         data={availableJobs}
-        renderItem={renderJobCard}
+        renderItem={({ item, index }) => renderJobCard({ item, index: index + myJobs.length })}
         keyExtractor={(item) => item.id}
+        ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

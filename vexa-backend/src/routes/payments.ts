@@ -279,6 +279,9 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
     }
 
     const amount = job.revisedPrice || job.originalPrice;
+    const securityHash = crypto.createHash('sha256')
+      .update(`${jobId}-${req.user!.userId}-${job.selectedProviderId}-${amount}-${Date.now()}-cash`)
+      .digest('hex');
 
     // Create completed cash payment record
     const payment = await prisma.payment.create({
@@ -287,7 +290,9 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
         payerId: req.user!.userId,
         payeeId: job.selectedProviderId,
         amount,
+        currency: 'INR',
         paymentMethod: 'CASH',
+        securityHash,
         status: 'COMPLETED',
       },
     });
