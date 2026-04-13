@@ -104,8 +104,11 @@ export { io };
 
 // Start server
 const PORT = process.env.PORT || 3000;
+const PUBLIC_URL = process.env.BETTER_AUTH_URL || `http://localhost:${PORT}`;
+
 server.listen(PORT, () => {
-  console.log(`\n🚀 VEXA Backend running on http://localhost:${PORT}`);
+  console.log(`\n🚀 VEXA Backend running`);
   console.log(`📡 Socket.io ready for real-time events`);
-  console.log(`📊 API docs: http://localhost:${PORT}/api/health\n`);
+  console.log(`🌐 Public URL: ${PUBLIC_URL}`);
+  console.log(`📊 Health check: ${PUBLIC_URL}/api/health\n`);
 });

@@ -5,11 +5,11 @@ import { useNotificationStore } from '../store/useNotificationStore';
 import { SOCKET_EVENTS } from '../utils/constants';
 
 // ─── Match the same production/dev toggle as api.ts ─────────────
-const USE_PRODUCTION = false; // set to true when deploying
+const USE_PRODUCTION = true;
 
 const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 const SOCKET_URL = USE_PRODUCTION
-  ? 'https://your-backend-url.onrender.com'   // ← replace with your Render URL
+  ? 'https://vexa-backend-hx9v.onrender.com'
   : `http://${HOST}:3000`;
 
 let socket: Socket | null = null;
