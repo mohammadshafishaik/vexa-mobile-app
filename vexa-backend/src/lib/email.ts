@@ -1,20 +1,70 @@
 import nodemailer from 'nodemailer';
 
-// Create transporter — defaults to Gmail App Password
-// For production, use a proper SMTP service (e.g., SendGrid, Mailgun)
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'vexaapp.support@gmail.com',
-    pass: process.env.EMAIL_PASS || '',
-  },
-});
+type MailMode = 'none' | 'gmail' | 'smtp';
+
+const emailUser = process.env.SMTP_USER?.trim() || process.env.EMAIL_USER?.trim() || '';
+const emailPass = process.env.SMTP_PASS?.trim() || process.env.EMAIL_PASS?.trim() || '';
+const smtpHost = process.env.SMTP_HOST?.trim() || '';
+const smtpPort = Number(process.env.SMTP_PORT || '587');
+const smtpSecure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
+
+const fromName = process.env.EMAIL_FROM_NAME?.trim() || 'VEXA App';
+const fromAddress = process.env.EMAIL_FROM?.trim() || emailUser;
+
+let mailMode: MailMode = 'none';
+let transporter: nodemailer.Transporter | null = null;
+
+if (smtpHost && emailUser && emailPass) {
+  mailMode = 'smtp';
+  transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
+    auth: {
+      user: emailUser,
+      pass: emailPass,
+    },
+  });
+} else if (emailUser && emailPass) {
+  mailMode = 'gmail';
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: emailUser,
+      pass: emailPass,
+    },
+  });
+}
+
+export function isEmailConfigured(): boolean {
+  return !!transporter;
+}
+
+export async function verifyEmailTransport(): Promise<void> {
+  if (!transporter) {
+    console.warn('[Email] Transport not configured. Set SMTP_HOST/SMTP_USER/SMTP_PASS or EMAIL_USER/EMAIL_PASS.');
+    return;
+  }
+
+  try {
+    await transporter.verify();
+    console.log(`[Email] Transport ready (${mailMode}) as ${fromAddress}`);
+  } catch (error) {
+    console.error('[Email] Transport verification failed:', error);
+  }
+}
 
 export async function sendPasswordResetEmail(to: string, resetToken: string) {
-  const resetUrl = `${process.env.BETTER_AUTH_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&email=${encodeURIComponent(to)}`;
+  if (!transporter || !fromAddress) {
+    console.error('[Email] Password reset email not sent: transport is not configured.');
+    return false;
+  }
+
+  const resetBaseUrl = (process.env.PASSWORD_RESET_URL || process.env.BETTER_AUTH_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const resetUrl = `${resetBaseUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(to)}`;
 
   const mailOptions = {
-    from: `"VEXA App" <${process.env.EMAIL_USER || 'vexaapp.support@gmail.com'}>`,
+    from: `"${fromName}" <${fromAddress}>`,
     to,
     subject: 'VEXA — Password Reset Request',
     html: `
@@ -37,7 +87,7 @@ export async function sendPasswordResetEmail(to: string, resetToken: string) {
           </div>
           <p style="color: #999; font-size: 13px; line-height: 1.5;">
             If you didn't request a password reset, you can safely ignore this email. 
-            This link will expire in 1 hour.
+            This link will expire in 30 minutes.
           </p>
           <hr style="border: none; border-top: 1px solid #333; margin: 16px 0;" />
           <p style="color: #666; font-size: 12px;">
@@ -53,8 +103,8 @@ export async function sendPasswordResetEmail(to: string, resetToken: string) {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log(`[Email] Password reset email sent to ${to}`);
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`[Email] Password reset email sent to ${to} (messageId: ${result.messageId})`);
     return true;
   } catch (error) {
     console.error('[Email] Failed to send password reset email:', error);

@@ -32,7 +32,9 @@ const ForgotPasswordScreen: React.FC = () => {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [resetToken, setResetToken] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(null);
 
   const handleSendReset = async () => {
     const emailErr = validateEmail(email);
@@ -40,21 +42,31 @@ const ForgotPasswordScreen: React.FC = () => {
     if (emailErr) return;
 
     setIsLoading(true);
+    setGeneralError(null);
     try {
       const response = await api.post('/custom-auth/forgot-password', {
         email: email.trim().toLowerCase(),
       });
 
       if (response.data.success) {
+        setSuccessMessage(
+          response.data.message
+            || `If an account exists for ${email.trim()}, we've sent password reset instructions.`,
+        );
         setIsSuccess(true);
         // In dev mode, the API returns the token for testing
         if (response.data.resetToken) {
           setResetToken(response.data.resetToken);
         }
+      } else {
+        setGeneralError(response.data.message || 'Unable to process password reset right now.');
       }
     } catch (error: any) {
-      // Still show success to prevent email enumeration
-      setIsSuccess(true);
+      const message =
+        error?.response?.data?.message
+        || error?.message
+        || 'Unable to process password reset right now.';
+      setGeneralError(message);
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +103,7 @@ const ForgotPasswordScreen: React.FC = () => {
             </View>
             <Text style={styles.successTitle}>Check your email</Text>
             <Text style={styles.successSubtitle}>
-              If an account exists for {email.trim()}, we've sent password reset instructions.
+              {successMessage || `If an account exists for ${email.trim()}, we've sent password reset instructions.`}
             </Text>
 
             {/* Dev mode: show reset button */}
@@ -157,6 +169,12 @@ const ForgotPasswordScreen: React.FC = () => {
 
           <Animated.View entering={FadeInDown.delay(200).duration(500)}>
             <GlassCard style={styles.formCard}>
+              {generalError && (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorBannerText}>{generalError}</Text>
+                </View>
+              )}
+
               <Input
                 label="Email Address"
                 placeholder="you@example.com"
@@ -164,6 +182,7 @@ const ForgotPasswordScreen: React.FC = () => {
                 onChangeText={(text) => {
                   setEmail(text);
                   if (emailError) setEmailError(null);
+                  if (generalError) setGeneralError(null);
                 }}
                 onBlur={() => {
                   if (email.trim()) setEmailError(validateEmail(email));
@@ -224,6 +243,20 @@ const styles = StyleSheet.create({
   },
   formCard: {
     padding: spacing[5],
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: borderRadius.md,
+    padding: spacing[3],
+    marginBottom: spacing[4],
+  },
+  errorBannerText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: fontSizes.sm,
+    color: colors.error,
+    textAlign: 'center',
   },
   backArea: {
     alignItems: 'center',

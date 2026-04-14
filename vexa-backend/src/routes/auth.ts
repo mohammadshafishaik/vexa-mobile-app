@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import prisma from '../lib/prisma';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { authMiddleware } from '../middleware/auth';
-import { sendPasswordResetEmail } from '../lib/email';
+import { sendPasswordResetEmail, isEmailConfigured } from '../lib/email';
 import {
   validateRegistration,
   validateLogin,
@@ -335,6 +335,14 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
       return;
     }
 
+    if (!isEmailConfigured()) {
+      res.status(503).json({
+        success: false,
+        message: 'Password reset email service is not configured. Please contact support.',
+      });
+      return;
+    }
+
     const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
       select: {
@@ -381,10 +389,13 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
     });
 
     // Send the actual email
-    try {
-      await sendPasswordResetEmail(email.trim().toLowerCase(), token);
-    } catch (emailErr) {
-      console.warn('[Auth] Email send failed, falling back to log:', emailErr);
+    const emailSent = await sendPasswordResetEmail(email.trim().toLowerCase(), token);
+    if (!emailSent) {
+      res.status(503).json({
+        success: false,
+        message: 'Unable to send password reset email right now. Please try again shortly.',
+      });
+      return;
     }
 
     // Also log in dev mode for testing
@@ -394,10 +405,16 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
       console.log(`   Expires: ${expiresAt.toISOString()}\n`);
     }
 
-    res.json({
+    const responsePayload: any = {
       success: true,
       message: 'If an account with that email exists, a password reset link has been sent.',
-    });
+    };
+
+    if (process.env.NODE_ENV !== 'production') {
+      responsePayload.resetToken = token;
+    }
+
+    res.json(responsePayload);
   } catch (error: any) {
     console.error('Forgot password error:', error);
     res.status(500).json({ success: false, message: 'Failed to process request' });

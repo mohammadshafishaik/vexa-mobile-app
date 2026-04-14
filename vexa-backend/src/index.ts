@@ -8,6 +8,7 @@ import http from 'http';
 import { Server as SocketServer } from 'socket.io';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth';
+import { verifyEmailTransport } from './lib/email';
 import { setIO } from './lib/socket';
 import prisma from './lib/prisma';
 
@@ -127,4 +128,5 @@ server.listen(PORT, () => {
   console.log(`📡 Socket.io ready for real-time events`);
   console.log(`🌐 Public URL: ${PUBLIC_URL}`);
   console.log(`📊 Health check: ${PUBLIC_URL}/api/health\n`);
+  verifyEmailTransport().catch(() => {});
 });
