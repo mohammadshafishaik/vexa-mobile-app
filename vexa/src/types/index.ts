@@ -80,6 +80,7 @@ export interface User {
 
 export interface ServiceRequest {
   id: string;
+  orderId: string;
   customerId: string;
   customer?: User;
   title: string;

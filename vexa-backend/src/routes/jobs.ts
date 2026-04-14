@@ -24,6 +24,32 @@ const getMinimumPriceForCategory = (category: string): number => {
   return CATEGORY_MIN_PRICE[key] ?? DEFAULT_MIN_PRICE;
 };
 
+const generateOrderIdCandidate = (): string => {
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const randomSegment = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `VXA-${year}${month}${day}-${randomSegment}`;
+};
+
+const createUniqueOrderId = async (): Promise<string> => {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const candidate = generateOrderIdCandidate();
+    const exists = await prisma.serviceRequest.findUnique({
+      where: { orderId: candidate },
+      select: { id: true },
+    });
+
+    if (!exists) {
+      return candidate;
+    }
+  }
+
+  const fallback = `VXA-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  return fallback;
+};
+
 // GET /api/jobs — list jobs (role-aware)
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -95,8 +121,11 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    const orderId = await createUniqueOrderId();
+
     const job = await prisma.serviceRequest.create({
       data: {
+        orderId,
         customerId: req.user!.userId,
         title,
         description,

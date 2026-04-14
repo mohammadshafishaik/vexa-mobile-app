@@ -129,6 +129,7 @@ model PasswordResetToken {
 
 model ServiceRequest {
   id                 String    @id @default(uuid())
+  orderId            String    @unique
   customerId         String
   customer           User      @relation("CustomerJobs", fields: [customerId], references: [id])
   title              String
