@@ -16,6 +16,20 @@ const api: AxiosInstance = axios.create({
   },
 });
 
+const NON_REFRESHABLE_AUTH_PATHS = [
+  '/custom-auth/login',
+  '/custom-auth/register',
+  '/custom-auth/google',
+  '/custom-auth/forgot-password',
+  '/custom-auth/reset-password',
+  '/custom-auth/refresh',
+];
+
+const isNonRefreshableAuthRequest = (url?: string): boolean => {
+  if (!url) return false;
+  return NON_REFRESHABLE_AUTH_PATHS.some((path) => url.includes(path));
+};
+
 // Request interceptor — attach JWT token
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -36,14 +50,18 @@ api.interceptors.response.use(
       _retry?: boolean;
     };
 
+    const shouldSkipRefresh = isNonRefreshableAuthRequest(originalRequest?.url);
+
     // If 401 and we haven't retried yet, attempt token refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !shouldSkipRefresh) {
       originalRequest._retry = true;
 
       try {
         const tokens = useAuthStore.getState().tokens;
         if (!tokens?.refreshToken) {
-          throw new Error('No refresh token available');
+          // No refresh token means the session is already invalid.
+          useAuthStore.getState().logout();
+          return Promise.reject(error);
         }
 
         // Call refresh endpoint (will be implemented in Phase 3)
@@ -60,7 +78,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         // Refresh failed — force logout
         useAuthStore.getState().logout();
-        return Promise.reject(refreshError);
+        return Promise.reject(error);
       }
     }
 
