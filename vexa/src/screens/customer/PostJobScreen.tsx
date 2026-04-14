@@ -48,6 +48,25 @@ const CATEGORIES = [
   'Other',
 ];
 
+const CATEGORY_MIN_BUDGET: Record<string, number> = {
+  Plumbing: 300,
+  Electrical: 300,
+  Cleaning: 250,
+  Painting: 400,
+  Carpentry: 350,
+  'Appliance Repair': 350,
+  'AC Service': 400,
+  'Pest Control': 450,
+  Other: 250,
+};
+
+const DEFAULT_MIN_BUDGET = 250;
+
+const getMinimumBudgetForCategory = (category: string): number => {
+  if (!category) return DEFAULT_MIN_BUDGET;
+  return CATEGORY_MIN_BUDGET[category] ?? DEFAULT_MIN_BUDGET;
+};
+
 const PostJobScreen: React.FC = () => {
   const navigation = useNavigation();
   const addJob = useJobStore((s) => s.addJob);
@@ -62,6 +81,25 @@ const PostJobScreen: React.FC = () => {
   const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const selectedCategoryMinimum = getMinimumBudgetForCategory(category);
+
+  const getCurrentPositionAsync = (options: any): Promise<any> =>
+    new Promise((resolve, reject) => {
+      Geolocation.getCurrentPosition(resolve, reject, options);
+    });
+
+  const getReadableLocationError = (error: any): string => {
+    if (error?.code === 1) {
+      return 'Location permission was denied. Please allow GPS access in app settings.';
+    }
+    if (error?.code === 2) {
+      return 'Location is currently unavailable. Please ensure GPS is enabled and try again.';
+    }
+    if (error?.code === 3) {
+      return 'Location request timed out. Move near open sky and try GPS again.';
+    }
+    return error?.message || 'Unable to get your location right now. Please enter location manually.';
+  };
 
   const getAreaTextFromNominatim = (payload: any): string | null => {
     const address = payload?.address || {};
@@ -97,6 +135,23 @@ const PostJobScreen: React.FC = () => {
   };
 
   const resolveAreaFromCoordinates = async (lat: number, lng: number): Promise<string | null> => {
+    const fetchJsonWithTimeout = async (url: string, headers: Record<string, string>, timeoutMs = 3000) => {
+      const timeoutPromise = new Promise((_, reject) => {
+        const timer = setTimeout(() => {
+          clearTimeout(timer);
+          reject(new Error('reverse-geocode timeout'));
+        }, timeoutMs);
+      });
+
+      const response = await Promise.race([
+        fetch(url, { headers }),
+        timeoutPromise,
+      ]) as Response;
+
+      if (!response.ok) return null;
+      return response.json();
+    };
+
     const providers = [
       {
         url: `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
@@ -117,10 +172,8 @@ const PostJobScreen: React.FC = () => {
 
     for (const provider of providers) {
       try {
-        const response = await fetch(provider.url, { headers: provider.headers });
-        if (!response.ok) continue;
-
-        const payload = await response.json();
+        const payload = await fetchJsonWithTimeout(provider.url, provider.headers);
+        if (!payload) continue;
         const areaText = provider.parser(payload);
         if (areaText) return areaText;
       } catch {
@@ -165,22 +218,34 @@ const PostJobScreen: React.FC = () => {
     }
 
     setIsGettingLocation(true);
-    Geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setCoords({ lat, lng });
+    try {
+      let position: any;
 
-        const resolvedArea = await resolveAreaFromCoordinates(lat, lng);
-        setLocation(resolvedArea || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        setIsGettingLocation(false);
-      },
-      (error) => {
-        Alert.alert('Location Error', error.message);
-        setIsGettingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-    );
+      try {
+        position = await getCurrentPositionAsync({
+          enableHighAccuracy: false,
+          timeout: 6000,
+          maximumAge: 120000,
+        });
+      } catch {
+        position = await getCurrentPositionAsync({
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 15000,
+        });
+      }
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      setCoords({ lat, lng });
+
+      const resolvedArea = await resolveAreaFromCoordinates(lat, lng);
+      setLocation(resolvedArea || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+    } catch (error: any) {
+      Alert.alert('Location Error', getReadableLocationError(error));
+    } finally {
+      setIsGettingLocation(false);
+    }
   };
 
   const handlePickImages = async () => {
@@ -198,6 +263,17 @@ const PostJobScreen: React.FC = () => {
     if (!title.trim() || !description.trim() || !category || !location.trim()) {
       return;
     }
+
+    const minimumBudget = getMinimumBudgetForCategory(category);
+    const numericBudget = Number(price);
+    if (!price.trim() || Number.isNaN(numericBudget) || numericBudget < minimumBudget) {
+      Alert.alert(
+        'Invalid Budget',
+        `Minimum budget for ${category} is ₹${minimumBudget}. Please update the amount to continue.`,
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // Upload images first
@@ -230,7 +306,7 @@ const PostJobScreen: React.FC = () => {
         location: location.trim(),
         latitude: coords?.lat,
         longitude: coords?.lng,
-        originalPrice: price ? Number(price) : 0,
+        originalPrice: numericBudget,
         urgency,
         images: uploadedUrls,
       });
@@ -310,7 +386,14 @@ const PostJobScreen: React.FC = () => {
                     styles.categoryChip,
                     category === cat && styles.categoryChipActive,
                   ]}
-                  onPress={() => setCategory(cat)}
+                  onPress={() => {
+                    setCategory(cat);
+                    const minBudget = getMinimumBudgetForCategory(cat);
+                    const existingPrice = Number(price);
+                    if (!price.trim() || Number.isNaN(existingPrice) || existingPrice < minBudget) {
+                      setPrice(String(minBudget));
+                    }
+                  }}
                 >
                   <Text
                     style={[
@@ -347,12 +430,17 @@ const PostJobScreen: React.FC = () => {
           {/* Budget (Optional) */}
           <Animated.View entering={FadeInDown.delay(300).duration(400)}>
             <Input
-              label="Estimated Budget (₹) — Optional"
-              placeholder="Leave blank if unsure"
+              label="Estimated Budget (₹)"
+              placeholder={`Minimum ₹${selectedCategoryMinimum}`}
               value={price}
               onChangeText={setPrice}
               keyboardType="numeric"
               icon={<DollarSign size={18} color={colors.gray500} />}
+              hint={
+                category
+                  ? `Minimum for ${category}: ₹${selectedCategoryMinimum}`
+                  : `Select a category to set the minimum budget (starts at ₹${DEFAULT_MIN_BUDGET})`
+              }
             />
           </Animated.View>
 
@@ -409,7 +497,8 @@ const PostJobScreen: React.FC = () => {
                 !title.trim() ||
                 !description.trim() ||
                 !category ||
-                !location.trim()
+                !location.trim() ||
+                !price.trim()
               }
               style={{ marginTop: spacing[4] }}
             />

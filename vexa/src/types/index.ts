@@ -71,6 +71,9 @@ export interface User {
   phone: string | null;
   role: UserRole;
   isVerified: boolean;
+  kycStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED' | string;
+  kycDocuments?: string[];
+  hasPassword?: boolean;
   createdAt: string;
   updatedAt: string;
 }

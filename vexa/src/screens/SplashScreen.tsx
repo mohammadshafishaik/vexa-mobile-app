@@ -141,9 +141,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+    width: 104,
+    height: 104,
+    borderRadius: 26,
     backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
@@ -156,13 +156,13 @@ const styles = StyleSheet.create({
   },
   logoLetter: {
     fontFamily: fontFamilies.bold,
-    fontSize: 40,
+    fontSize: 52,
     color: colors.black,
     letterSpacing: -2,
   },
   logoText: {
     fontFamily: fontFamilies.bold,
-    fontSize: fontSizes['3xl'],
+    fontSize: fontSizes['4xl'],
     color: colors.white,
     letterSpacing: 8,
   },

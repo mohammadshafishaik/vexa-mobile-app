@@ -19,43 +19,58 @@ import {
   FileText,
   Key,
 } from 'lucide-react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import ScreenContainer from '../components/layout/ScreenContainer';
 import GlassCard from '../components/ui/GlassCard';
 import Avatar from '../components/ui/Avatar';
 import Badge from '../components/ui/Badge';
+import Button from '../components/ui/Button';
 import { colors } from '../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
 import { useAuthStore } from '../store/useAuthStore';
 import { socketService } from '../services/socket';
 import api from '../services/api';
+import { uploadService } from '../services/upload';
+import { userService } from '../services/users';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const updateUser = useAuthStore((s) => s.updateUser);
 
   const [stats, setStats] = useState({
     jobCount: 0,
     avgRating: 0,
     reviewCount: 0,
   });
+  const [isKycUploading, setIsKycUploading] = useState(false);
 
   // Fetch stats on focus
   useFocusEffect(
     useCallback(() => {
-      const fetchStats = async () => {
+      const fetchProfileAndStats = async () => {
         try {
-          const res = await api.get('/custom-auth/stats');
-          if (res.data.success) {
-            setStats(res.data.data);
+          const [profileRes, statsRes] = await Promise.all([
+            api.get('/custom-auth/profile'),
+            api.get('/custom-auth/stats'),
+          ]);
+
+          if (profileRes.data.success) {
+            updateUser(profileRes.data.data);
+          }
+
+          if (statsRes.data.success) {
+            setStats(statsRes.data.data);
           }
         } catch (error) {
-          console.warn('Failed to fetch stats:', error);
+          console.warn('Failed to fetch profile/stats:', error);
         }
       };
-      fetchStats();
-    }, [])
+      fetchProfileAndStats();
+    }, [updateUser])
   );
 
   const handleLogout = () => {
@@ -67,12 +82,70 @@ const ProfileScreen: React.FC = () => {
         {
           text: 'Log Out',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            try {
+              const hasPreviousGoogleSession = await GoogleSignin.hasPreviousSignIn();
+              if (hasPreviousGoogleSession) {
+                await GoogleSignin.signOut();
+              }
+            } catch {
+              // Ignore Google sign-out errors and continue app logout.
+            }
             socketService.disconnect();
             logout();
           },
         },
       ]
+    );
+  };
+
+  const currentKycStatus = String(user?.kycStatus || 'PENDING').toUpperCase();
+  const kycDocuments = Array.isArray(user?.kycDocuments) ? user.kycDocuments : [];
+
+  const pickAndUploadKycDocument = async (docType: 'AADHAAR' | 'PAN') => {
+    setIsKycUploading(true);
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+      });
+
+      const fileUri = result.assets?.[0]?.uri;
+      if (!fileUri) {
+        setIsKycUploading(false);
+        return;
+      }
+
+      const uploadedUrl = await uploadService.uploadImage(fileUri);
+      const preservedDocuments = kycDocuments.filter((doc) => !doc.startsWith(`${docType}|`));
+      const nextKycDocuments = [...preservedDocuments, `${docType}|${uploadedUrl}`];
+
+      const response = await userService.submitKYC(nextKycDocuments);
+      if (response?.success && response?.data) {
+        updateUser(response.data);
+      }
+
+      Alert.alert(
+        'Verification Submitted',
+        `${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} document uploaded. Admin will review and verify your account.`,
+      );
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Failed to upload verification document.';
+      Alert.alert('Upload Failed', message);
+    } finally {
+      setIsKycUploading(false);
+    }
+  };
+
+  const handleUploadVerification = () => {
+    Alert.alert(
+      'Upload Verification ID',
+      'Choose the document you want to upload for verification.',
+      [
+        { text: 'Aadhaar', onPress: () => pickAndUploadKycDocument('AADHAAR') },
+        { text: 'PAN', onPress: () => pickAndUploadKycDocument('PAN') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
     );
   };
 
@@ -168,6 +241,45 @@ const ProfileScreen: React.FC = () => {
           </GlassCard>
         </Animated.View>
 
+        {/* Verification */}
+        <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+          <GlassCard style={styles.verificationCard}>
+            <View style={styles.verificationHeaderRow}>
+              <Text style={styles.verificationTitle}>Identity Verification</Text>
+              <Badge
+                label={currentKycStatus}
+                color={
+                  currentKycStatus === 'VERIFIED'
+                    ? colors.success
+                    : currentKycStatus === 'REJECTED'
+                    ? colors.error
+                    : colors.warning
+                }
+                variant="filled"
+                size="sm"
+              />
+            </View>
+            <Text style={styles.verificationText}>
+              Upload Aadhaar or PAN for verification. Admin will review and approve your profile.
+            </Text>
+            {kycDocuments.length > 0 && (
+              <Text style={styles.verificationMetaText}>
+                Documents submitted: {kycDocuments.length}
+              </Text>
+            )}
+            <Button
+              title={isKycUploading ? 'Uploading...' : 'Upload Aadhaar / PAN'}
+              onPress={handleUploadVerification}
+              variant="secondary"
+              size="md"
+              fullWidth
+              loading={isKycUploading}
+              disabled={isKycUploading}
+              style={{ marginTop: spacing[3] }}
+            />
+          </GlassCard>
+        </Animated.View>
+
         {/* Menu Items */}
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <View style={styles.menuSection}>
@@ -229,6 +341,29 @@ const styles = StyleSheet.create({
   },
   statsCard: {
     marginBottom: spacing[5],
+  },
+  verificationCard: {
+    marginBottom: spacing[5],
+  },
+  verificationHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing[2],
+  },
+  verificationTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.white,
+  },
+  verificationText: {
+    ...typography.bodySm,
+    color: colors.gray400,
+  },
+  verificationMetaText: {
+    ...typography.caption,
+    color: colors.gray500,
+    marginTop: spacing[2],
   },
   statsRow: {
     flexDirection: 'row',

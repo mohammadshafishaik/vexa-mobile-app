@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { Shield, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
 import ScreenContainer from '../components/layout/ScreenContainer';
 import Button from '../components/ui/Button';
 import GlassCard from '../components/ui/GlassCard';
@@ -33,6 +34,27 @@ GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
   offlineAccess: true,
 });
+
+const GoogleIcon: React.FC = () => (
+  <Svg width={18} height={18} viewBox="0 0 533.5 544.3" accessibilityRole="image">
+    <Path
+      fill="#4285F4"
+      d="M533.5 278.4c0-18.5-1.5-37-4.7-55H272v104.4h147.2c-6.4 34.6-25.9 63.9-55.2 83.5v69h89.2c52.2-48.1 80.3-119.1 80.3-201.9z"
+    />
+    <Path
+      fill="#34A853"
+      d="M272 544.3c72.6 0 133.8-24.1 178.4-64l-89.2-69c-24.8 16.6-56.5 26.3-89.2 26.3-68.6 0-126.8-46.4-147.6-108.9H32.2v68.9c45.6 90.8 138.5 146.7 239.8 146.7z"
+    />
+    <Path
+      fill="#FBBC04"
+      d="M124.4 328.7c-10.4-30.9-10.4-64.6 0-95.5V164.3H32.2c-38.5 76.8-38.5 167.9 0 244.7l92.2-68.9z"
+    />
+    <Path
+      fill="#EA4335"
+      d="M272 107.7c35.5-.6 69.8 12.9 95.7 37.7l71.1-71.1C401 35.1 338.7 0 272 0 170.7 0 77.8 55.9 32.2 146.7l92.2 68.9C145.2 154.1 203.4 107.7 272 107.7z"
+    />
+  </Svg>
+);
 
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<LoginNav>();
@@ -78,18 +100,23 @@ const LoginScreen: React.FC = () => {
         setGeneralError(response.data.message || 'Login failed');
       }
     } catch (error: any) {
+      const serverMessage = error?.response?.data?.message;
+      if (serverMessage) {
+        setGeneralError(serverMessage);
+        return;
+      }
+
       const rawMessage = String(error?.message || '').toLowerCase();
       const isNetworkError =
         error?.code === 'ERR_NETWORK'
         || rawMessage.includes('network error')
-        || (!error?.response && !error?.request);
+        || (!error?.response && !!error?.request);
       const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
       const msg = isNetworkError
         ? 'Unable to reach server. Check internet connection and backend URL.'
         : isTimeout
         ? 'Server is waking up (free tier). Please wait 60 seconds and try again.'
-        : error?.response?.data?.message ||
-          error.message ||
+        : error.message ||
           'Login failed. Please check your credentials.';
       setGeneralError(msg);
     } finally {
@@ -97,12 +124,25 @@ const LoginScreen: React.FC = () => {
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (forceAccountPicker = false) => {
     setGeneralError(null);
     setIsLoading(true);
 
     try {
       await GoogleSignin.hasPlayServices();
+
+      // Force account chooser when user wants to switch Gmail accounts.
+      if (forceAccountPicker) {
+        try {
+          const hasPrevious = await GoogleSignin.hasPreviousSignIn();
+          if (hasPrevious) {
+            await GoogleSignin.signOut();
+          }
+        } catch {
+          // Ignore sign-out failures and continue sign-in.
+        }
+      }
+
       const userInfo = await GoogleSignin.signIn();
       const idToken = userInfo.data?.idToken;
       const googleEmail = userInfo.data?.user?.email;
@@ -283,13 +323,21 @@ const LoginScreen: React.FC = () => {
           >
             <TouchableOpacity
               style={styles.googleButton}
-              onPress={handleGoogleSignIn}
+              onPress={() => handleGoogleSignIn(true)}
               activeOpacity={0.7}
             >
               <View style={styles.googleIcon}>
-                <Text style={styles.googleG}>G</Text>
+                <GoogleIcon />
               </View>
               <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.switchGoogleAccountButton}
+              onPress={() => handleGoogleSignIn(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.switchGoogleAccountText}>Use a different Google account</Text>
             </TouchableOpacity>
           </Animated.View>
 
@@ -331,9 +379,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing[8],
   },
   logoBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
+    width: 84,
+    height: 84,
+    borderRadius: 20,
     backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
@@ -346,13 +394,13 @@ const styles = StyleSheet.create({
   },
   logoLetter: {
     fontFamily: fontFamilies.bold,
-    fontSize: 32,
+    fontSize: 44,
     color: colors.black,
     letterSpacing: -2,
   },
   appName: {
     fontFamily: fontFamilies.bold,
-    fontSize: fontSizes.xl,
+    fontSize: fontSizes['2xl'],
     color: colors.white,
     letterSpacing: 6,
     marginBottom: spacing[1],
@@ -439,20 +487,22 @@ const styles = StyleSheet.create({
   googleIcon: {
     width: 24,
     height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  googleG: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 14,
-    color: colors.gray900,
   },
   googleButtonText: {
     fontFamily: fontFamilies.semibold,
     fontSize: fontSizes.base,
     color: colors.gray300,
+  },
+  switchGoogleAccountButton: {
+    alignSelf: 'center',
+    marginTop: spacing[2],
+  },
+  switchGoogleAccountText: {
+    ...typography.caption,
+    color: colors.gray500,
+    textDecorationLine: 'underline',
   },
   registerArea: {
     flexDirection: 'row',

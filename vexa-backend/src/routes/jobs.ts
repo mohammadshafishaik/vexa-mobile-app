@@ -5,6 +5,25 @@ import { getIO } from '../lib/socket';
 
 const router = Router();
 
+const CATEGORY_MIN_PRICE: Record<string, number> = {
+  plumbing: 300,
+  electrical: 300,
+  cleaning: 250,
+  painting: 400,
+  carpentry: 350,
+  'appliance repair': 350,
+  'ac service': 400,
+  'pest control': 450,
+  other: 250,
+};
+
+const DEFAULT_MIN_PRICE = 250;
+
+const getMinimumPriceForCategory = (category: string): number => {
+  const key = String(category || '').trim().toLowerCase();
+  return CATEGORY_MIN_PRICE[key] ?? DEFAULT_MIN_PRICE;
+};
+
 // GET /api/jobs — list jobs (role-aware)
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -66,6 +85,16 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    const numericOriginalPrice = Number(originalPrice);
+    const minPrice = getMinimumPriceForCategory(category);
+    if (Number.isNaN(numericOriginalPrice) || numericOriginalPrice < minPrice) {
+      res.status(400).json({
+        success: false,
+        message: `Minimum budget for ${category} is ₹${minPrice}`,
+      });
+      return;
+    }
+
     const job = await prisma.serviceRequest.create({
       data: {
         customerId: req.user!.userId,
@@ -76,7 +105,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         latitude: latitude || null,
         longitude: longitude || null,
         images: images || [],
-        originalPrice: Number(originalPrice || 0),
+        originalPrice: numericOriginalPrice,
         urgency: urgency || 'NORMAL',
         status: 'BIDDING',
       },

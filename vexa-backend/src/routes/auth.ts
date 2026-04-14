@@ -26,6 +26,8 @@ const authUserSelect = {
   phone: true,
   role: true,
   isVerified: true,
+  kycStatus: true,
+  kycDocuments: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -38,6 +40,8 @@ const toPublicUser = (user: any) => ({
   phone: user.phone,
   role: user.role,
   isVerified: user.isVerified,
+  kycStatus: user.kycStatus,
+  kycDocuments: user.kycDocuments,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
@@ -503,6 +507,7 @@ router.get('/profile', authMiddleware, async (req: Request, res: Response) => {
       select: {
         id: true, email: true, name: true, avatarUrl: true,
         phone: true, role: true, isVerified: true,
+        kycStatus: true, kycDocuments: true, password: true,
         createdAt: true, updatedAt: true,
       },
     });
@@ -512,7 +517,8 @@ router.get('/profile', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data: { ...user, hasPassword: !!user } });
+    const { password, ...publicUser } = user;
+    res.json({ success: true, data: { ...publicUser, hasPassword: !!password } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -563,6 +569,7 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
       select: {
         id: true, email: true, name: true, avatarUrl: true,
         phone: true, role: true, isVerified: true,
+        kycStatus: true, kycDocuments: true,
         createdAt: true, updatedAt: true,
       },
     });
