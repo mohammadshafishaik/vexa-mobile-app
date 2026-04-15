@@ -28,8 +28,8 @@ Do not create a new backend service.
    - Keep your existing production values from local private env file.
    - Ensure these keys exist:
        - BETTER_AUTH_URL = https://vexa-backend-hx9v.onrender.com
-         - ADMIN_JWT_SECRET = <paste generated secret in Render>
-         - ADMIN_JWT_REFRESH_SECRET = <paste generated refresh secret in Render>
+       - ADMIN_JWT_SECRET = <paste generated secret in Render>
+       - ADMIN_JWT_REFRESH_SECRET = <paste generated refresh secret in Render>
        - CORS_ALLOWED_ORIGINS (before Vercel admin deploy) = http://localhost:3001,http://127.0.0.1:3001
        - PASSWORD_RESET_URL = https://vexa-backend-hx9v.onrender.com
 3. Trigger deploy (manual deploy latest commit if needed).
