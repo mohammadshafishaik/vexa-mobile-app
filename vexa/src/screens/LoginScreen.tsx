@@ -24,7 +24,7 @@ import { spacing, borderRadius } from '../theme/spacing';
 import { AuthStackParamList } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
 import { validateEmail } from '../utils/validation';
-import api from '../services/api';
+import api, { warmupBackend } from '../services/api';
 
 type LoginNav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -88,6 +88,8 @@ const LoginScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
+      await warmupBackend();
+
       const response = await api.post('/custom-auth/login', {
         email: email.trim().toLowerCase(),
         password: password.trim(),
@@ -154,6 +156,8 @@ const LoginScreen: React.FC = () => {
         throw new Error('Incomplete data from Google');
       }
 
+      await warmupBackend();
+
       const response = await api.post('/custom-auth/google', {
         idToken,
         email: googleEmail,
@@ -171,6 +175,7 @@ const LoginScreen: React.FC = () => {
     } catch (error: any) {
       const rawMessage = String(error?.message || '');
       const lowerMessage = rawMessage.toLowerCase();
+      const isTimeout = error?.code === 'ECONNABORTED' || lowerMessage.includes('timeout');
 
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         // User cancelled the sign-in flow.
@@ -184,6 +189,8 @@ const LoginScreen: React.FC = () => {
         );
       } else if (error?.code === 'ERR_NETWORK' || lowerMessage.includes('network error')) {
         setGeneralError('Google account selected, but server is unreachable. Check backend URL and internet connection.');
+      } else if (isTimeout) {
+        setGeneralError('Server is waking up (free tier). Please wait 60 seconds and try again.');
       } else {
         if (__DEV__) {
           console.warn('[Auth] Google Sign-In error:', error);

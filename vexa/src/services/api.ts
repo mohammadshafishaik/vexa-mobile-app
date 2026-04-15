@@ -8,12 +8,31 @@ const BASE_URL = API_BASE_URL;
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 35000,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
 });
+
+let lastWarmupAt = 0;
+
+export const warmupBackend = async (): Promise<void> => {
+  const now = Date.now();
+  if (now - lastWarmupAt < 30_000) {
+    return;
+  }
+
+  try {
+    await axios.get(`${BASE_URL}/health`, {
+      timeout: 20_000,
+      headers: { Accept: 'application/json' },
+    });
+    lastWarmupAt = Date.now();
+  } catch {
+    // Ignore warmup errors and let caller attempt the real request.
+  }
+};
 
 const NON_REFRESHABLE_AUTH_PATHS = [
   '/custom-auth/login',
