@@ -11,6 +11,7 @@ import { auth } from './lib/auth';
 import { verifyEmailTransport } from './lib/email';
 import { setIO } from './lib/socket';
 import prisma from './lib/prisma';
+import { upsertSuperAdmin } from './utils/admin/superAdmin';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -42,6 +43,29 @@ const parsedCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || defaultCorsOrigin
 
 const allowAllCorsOrigins = parsedCorsOrigins.includes('*');
 const allowedOriginSet = new Set(parsedCorsOrigins);
+
+const readEnabledFlag = (value?: string): boolean => {
+  if (!value) return false;
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+};
+
+const bootstrapAdminFromEnv = async (): Promise<void> => {
+  if (!readEnabledFlag(process.env.ADMIN_BOOTSTRAP_ENABLED)) {
+    return;
+  }
+
+  const email = process.env.ADMIN_BOOTSTRAP_EMAIL;
+  const password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  const name = process.env.ADMIN_BOOTSTRAP_NAME;
+
+  if (!email || !password) {
+    console.warn('⚠️ ADMIN_BOOTSTRAP_ENABLED is true but ADMIN_BOOTSTRAP_EMAIL/PASSWORD is missing. Skipping bootstrap.');
+    return;
+  }
+
+  const admin = await upsertSuperAdmin({ email, password, name });
+  console.log(`✅ Admin bootstrap ready: ${admin.email} (${admin.adminRole})`);
+};
 
 const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
   if (!origin) {
@@ -163,4 +187,7 @@ server.listen(PORT, () => {
   console.log(`🔐 CORS mode: ${allowAllCorsOrigins ? 'allow-all' : parsedCorsOrigins.join(', ')}`);
   console.log(`📊 Health check: ${PUBLIC_URL}/api/health\n`);
   verifyEmailTransport().catch(() => {});
+  bootstrapAdminFromEnv().catch((error: any) => {
+    console.error('❌ Admin bootstrap failed:', error?.message || error);
+  });
 });

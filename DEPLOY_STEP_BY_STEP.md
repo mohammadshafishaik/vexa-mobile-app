@@ -27,11 +27,11 @@ Do not create a new backend service.
 2. Render -> Environment:
    - Keep your existing production values from local private env file.
    - Ensure these keys exist:
-     - BETTER_AUTH_URL = https://vexa-backend-hx9v.onrender.com
-     - ADMIN_JWT_SECRET = <strong random value>
-     - ADMIN_JWT_REFRESH_SECRET = <strong random value>
-     - CORS_ALLOWED_ORIGINS = http://localhost:3001,http://127.0.0.1:3001
-     - PASSWORD_RESET_URL = https://vexa-backend-hx9v.onrender.com
+       - BETTER_AUTH_URL = https://vexa-backend-hx9v.onrender.com
+         - ADMIN_JWT_SECRET = <paste generated secret in Render>
+         - ADMIN_JWT_REFRESH_SECRET = <paste generated refresh secret in Render>
+       - CORS_ALLOWED_ORIGINS (before Vercel admin deploy) = http://localhost:3001,http://127.0.0.1:3001
+       - PASSWORD_RESET_URL = https://vexa-backend-hx9v.onrender.com
 3. Trigger deploy (manual deploy latest commit if needed).
 
 ## Phase 3: Verify Backend After Deploy
@@ -47,10 +47,49 @@ Expected:
 
 ## Phase 4: Create Production Super Admin (One Time)
 
-From project root run:
+Use one of these two methods.
 
-cd vexa-backend
-ADMIN_EMAIL=superadmin@vexa.app ADMIN_PASSWORD='Admin@12345' ADMIN_NAME='VEXA Super Admin' npx tsx --env-file=../vexa-backend.env scripts/create-super-admin.ts
+Method A (recommended for free plan): Bootstrap from backend startup env.
+
+1. In Render -> vexa-backend -> Environment, add:
+
+   ADMIN_BOOTSTRAP_ENABLED=true
+   ADMIN_BOOTSTRAP_EMAIL=superadmin@vexa.app
+   ADMIN_BOOTSTRAP_PASSWORD=Admin@12345
+   ADMIN_BOOTSTRAP_NAME=VEXA Super Admin
+
+2. Redeploy backend once.
+3. Check Render logs for:
+
+   ✅ Admin bootstrap ready: superadmin@vexa.app (SUPER_ADMIN)
+
+4. Remove or disable bootstrap after success:
+
+   ADMIN_BOOTSTRAP_ENABLED=false
+
+Method B: Use Render External Database URL from your laptop.
+
+1. Open Render -> PostgreSQL database -> Connections.
+2. Copy External Database URL exactly as provided.
+3. Run from your laptop:
+
+   cd vexa-backend
+   DATABASE_URL='<paste_external_database_url_here>' ADMIN_EMAIL=superadmin@vexa.app ADMIN_PASSWORD='Admin@12345' ADMIN_NAME='VEXA Super Admin' npx tsx scripts/create-super-admin.ts
+
+Important:
+- External URL usually contains sslmode=require. Keep it as is.
+- Do not save this external URL in any committed file.
+- Do not use internal host URL (example: dpg-...-a), it will fail with Prisma P1001.
+
+Method C (optional, if available): Run inside Render shell for your backend service.
+
+1. Open Render -> vexa-backend -> Shell.
+2. Run:
+
+   cd /opt/render/project/src/vexa-backend
+   ADMIN_EMAIL=superadmin@vexa.app ADMIN_PASSWORD='Admin@12345' ADMIN_NAME='VEXA Super Admin' npx tsx scripts/create-super-admin.ts
+
+If you get Prisma P1001/P1017 from laptop, use Method A.
 
 ## Phase 5: Deploy Admin on Vercel
 
@@ -58,14 +97,12 @@ ADMIN_EMAIL=superadmin@vexa.app ADMIN_PASSWORD='Admin@12345' ADMIN_NAME='VEXA Su
 2. Add environment variable in Vercel:
    - NEXT_PUBLIC_API_BASE_URL = https://vexa-backend-hx9v.onrender.com/api
 3. Deploy and copy final admin URL.
+4. After deploy, update backend CORS in Render:
+   - CORS_ALLOWED_ORIGINS = https://<your-vercel-admin-url>,http://localhost:3001,http://127.0.0.1:3001
 
-## Phase 6: Connect Admin Domain to Backend CORS
+## Phase 6: Redeploy Backend After CORS Update
 
-In Render environment, update:
-
-CORS_ALLOWED_ORIGINS=https://<your-admin-domain>,http://localhost:3001,http://127.0.0.1:3001
-
-Redeploy backend once more.
+After adding your Vercel admin URL to CORS_ALLOWED_ORIGINS, redeploy backend once.
 
 ## Phase 7: Test End-to-End
 
