@@ -30,6 +30,23 @@ import adminRoutes from './routes/admin';
 const app = express();
 const server = http.createServer(app);
 
+const normalizeOrigin = (value: string): string => {
+  const cleaned = value
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .replace(/\/+$/g, '');
+
+  if (!cleaned || cleaned === '*') {
+    return cleaned;
+  }
+
+  try {
+    return new URL(cleaned).origin;
+  } catch {
+    return cleaned;
+  }
+};
+
 const defaultCorsOrigins = [
   process.env.BETTER_AUTH_URL || '',
   'http://localhost:3001',
@@ -38,11 +55,12 @@ const defaultCorsOrigins = [
 
 const parsedCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || defaultCorsOrigins.join(','))
   .split(',')
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 
 const allowAllCorsOrigins = parsedCorsOrigins.includes('*');
-const allowedOriginSet = new Set(parsedCorsOrigins);
+const allowedOrigins = parsedCorsOrigins.filter((origin) => origin !== '*');
+const allowedOriginSet = new Set(allowedOrigins);
 
 const readEnabledFlag = (value?: string): boolean => {
   if (!value) return false;
@@ -73,7 +91,9 @@ const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
     return;
   }
 
-  if (allowAllCorsOrigins || allowedOriginSet.has(origin)) {
+  const normalizedRequestOrigin = normalizeOrigin(origin);
+
+  if (allowAllCorsOrigins || allowedOriginSet.has(normalizedRequestOrigin)) {
     callback(null, true);
     return;
   }
@@ -84,7 +104,7 @@ const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
 // Socket.io setup
 const io = new SocketServer(server, {
   cors: {
-    origin: allowAllCorsOrigins ? true : parsedCorsOrigins,
+    origin: allowAllCorsOrigins ? true : allowedOrigins,
     methods: ['GET', 'POST'],
   },
 });
@@ -184,7 +204,7 @@ server.listen(PORT, () => {
   console.log(`\n🚀 VEXA Backend running`);
   console.log(`📡 Socket.io ready for real-time events`);
   console.log(`🌐 Public URL: ${PUBLIC_URL}`);
-  console.log(`🔐 CORS mode: ${allowAllCorsOrigins ? 'allow-all' : parsedCorsOrigins.join(', ')}`);
+  console.log(`🔐 CORS mode: ${allowAllCorsOrigins ? 'allow-all' : allowedOrigins.join(', ')}`);
   console.log(`📊 Health check: ${PUBLIC_URL}/api/health\n`);
   verifyEmailTransport().catch(() => {});
   bootstrapAdminFromEnv().catch((error: any) => {
