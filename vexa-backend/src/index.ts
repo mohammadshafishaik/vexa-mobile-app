@@ -23,14 +23,46 @@ import notificationRoutes from './routes/notifications';
 import disputeRoutes from './routes/disputes';
 import uploadRoutes from './routes/upload';
 import userRoutes from './routes/users';
+import adminRoutes from './routes/admin';
 
 
 const app = express();
 const server = http.createServer(app);
 
+const defaultCorsOrigins = [
+  process.env.BETTER_AUTH_URL || '',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
+];
+
+const parsedCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || defaultCorsOrigins.join(','))
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowAllCorsOrigins = parsedCorsOrigins.includes('*');
+const allowedOriginSet = new Set(parsedCorsOrigins);
+
+const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  if (allowAllCorsOrigins || allowedOriginSet.has(origin)) {
+    callback(null, true);
+    return;
+  }
+
+  callback(null, false);
+};
+
 // Socket.io setup
 const io = new SocketServer(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: {
+    origin: allowAllCorsOrigins ? true : parsedCorsOrigins,
+    methods: ['GET', 'POST'],
+  },
 });
 
 // Store io globally for route access
@@ -39,7 +71,7 @@ setIO(io);
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: '*',
+  origin: corsOrigin,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
 }));
@@ -90,6 +122,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/disputes', disputeRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Socket.io connection
 io.on('connection', (socket) => {
@@ -127,6 +160,7 @@ server.listen(PORT, () => {
   console.log(`\n🚀 VEXA Backend running`);
   console.log(`📡 Socket.io ready for real-time events`);
   console.log(`🌐 Public URL: ${PUBLIC_URL}`);
+  console.log(`🔐 CORS mode: ${allowAllCorsOrigins ? 'allow-all' : parsedCorsOrigins.join(', ')}`);
   console.log(`📊 Health check: ${PUBLIC_URL}/api/health\n`);
   verifyEmailTransport().catch(() => {});
 });

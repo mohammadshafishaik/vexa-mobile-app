@@ -18,6 +18,49 @@ enum UserRole {
   ADMIN
 }
 
+enum AdminRole {
+  SUPER_ADMIN
+  MODERATOR
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DELETED
+}
+
+enum KycDocumentType {
+  AADHAAR
+  PAN
+  OTHER
+}
+
+enum KycDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BidAnomalyStatus {
+  OPEN
+  REVIEWED
+  RESOLVED
+}
+
+enum BidAnomalyType {
+  RAPID_REBID
+  EXTREME_UNDERCUT
+  COLLUSION_PATTERN
+  OTHER
+}
+
+enum DisputeDecision {
+  REFUND
+  PARTIAL_SETTLEMENT
+  REJECT
+}
+
 enum JobStatus {
   POSTED
   BIDDING
@@ -79,6 +122,14 @@ model User {
   avatarUrl  String?
   phone      String?
   role       UserRole @default(CUSTOMER)
+  adminRole  AdminRole?
+  accountStatus AccountStatus @default(ACTIVE)
+  suspendedUntil DateTime?
+  banReason  String?
+  bannedAt   DateTime?
+  bannedById String?
+  bannedBy   User?    @relation("UserBanActor", fields: [bannedById], references: [id])
+  bannedUsers User[]  @relation("UserBanActor")
   isVerified Boolean  @default(false)
   
   // KYC & Verification
@@ -104,6 +155,15 @@ model User {
   disputesResolved    Dispute[]            @relation("DisputeResolver")
   notifications       Notification[]
   auditLogs           AuditLog[]
+  kycDocumentsUploaded KycDocument[] @relation("UserKycDocuments")
+  kycDocumentsReviewed KycDocument[] @relation("KycReviewedBy")
+  kycReviewLogs       KycReviewLog[] @relation("KycReviewActor")
+  bidAnomaliesFlagged BidAnomaly[] @relation("BidAnomalyProvider")
+  bidAnomaliesReviewed BidAnomaly[] @relation("BidAnomalyReviewer")
+  disputeResolutions  DisputeResolution[] @relation("DisputeResolvedBy")
+  paymentActionLogs   PaymentActionLog[] @relation("PaymentActionActor")
+  notificationCampaigns NotificationCampaign[] @relation("NotificationCampaignActor")
+  adminSessions       AdminSession[]
   passwordResetTokens PasswordResetToken[]
 
   emailVerified Boolean   @default(false)
@@ -159,6 +219,8 @@ model ServiceRequest {
   payments      Payment[]
   ratings       Rating[]
   disputes      Dispute[]
+  bidAnomalies  BidAnomaly[]
+  disputeResolutions DisputeResolution[]
 
   @@map("service_requests")
 }
@@ -175,6 +237,7 @@ model Bid {
   isSelected        Boolean        @default(false)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
+  anomalies         BidAnomaly[]
 
   @@unique([jobId, providerId])
   @@map("bids")
@@ -217,6 +280,7 @@ model Payment {
   securityHash      String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
+  actionLogs        PaymentActionLog[]
 
   @@map("payments")
 }
@@ -251,6 +315,7 @@ model Dispute {
   resolvedBy   User?          @relation("DisputeResolver", fields: [resolvedById], references: [id])
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
+  decisions    DisputeResolution[]
 
   @@map("disputes")
 }
@@ -284,6 +349,133 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@map("audit_logs")
+}
+
+model KycDocument {
+  id           String            @id @default(uuid())
+  userId       String
+  user         User              @relation("UserKycDocuments", fields: [userId], references: [id], onDelete: Cascade)
+  documentType KycDocumentType
+  fileKey      String
+  fileUrl      String
+  status       KycDocumentStatus @default(PENDING)
+  remarks      String?
+  reviewedById String?
+  reviewedBy   User?             @relation("KycReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  reviewLogs   KycReviewLog[]
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@map("kyc_documents")
+}
+
+model KycReviewLog {
+  id            String      @id @default(uuid())
+  documentId    String
+  document      KycDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  adminId       String
+  admin         User        @relation("KycReviewActor", fields: [adminId], references: [id], onDelete: Cascade)
+  action        String
+  remarks       String?
+  previousState Json?
+  newState      Json?
+  createdAt     DateTime    @default(now())
+
+  @@index([documentId, createdAt])
+  @@map("kyc_review_logs")
+}
+
+model BidAnomaly {
+  id            String           @id @default(uuid())
+  bidId         String?
+  bid           Bid?             @relation(fields: [bidId], references: [id], onDelete: SetNull)
+  jobId         String
+  job           ServiceRequest   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  providerId    String?
+  provider      User?            @relation("BidAnomalyProvider", fields: [providerId], references: [id], onDelete: SetNull)
+  anomalyType   BidAnomalyType
+  severityScore Int              @default(0)
+  reason        String
+  status        BidAnomalyStatus @default(OPEN)
+  reviewedById  String?
+  reviewedBy    User?            @relation("BidAnomalyReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+  metadata      Json?
+  createdAt     DateTime         @default(now())
+
+  @@index([jobId, status])
+  @@index([providerId, status])
+  @@map("bid_anomalies")
+}
+
+model DisputeResolution {
+  id           String          @id @default(uuid())
+  disputeId    String
+  dispute      Dispute         @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  jobId        String
+  job          ServiceRequest  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  decision     DisputeDecision
+  refundAmount Float?
+  remarks      String?
+  resolvedById String
+  resolvedBy   User            @relation("DisputeResolvedBy", fields: [resolvedById], references: [id], onDelete: Cascade)
+  metadata     Json?
+  createdAt    DateTime        @default(now())
+
+  @@index([disputeId, createdAt])
+  @@index([jobId, createdAt])
+  @@map("dispute_resolutions")
+}
+
+model PaymentActionLog {
+  id        String   @id @default(uuid())
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  adminId   String
+  admin     User     @relation("PaymentActionActor", fields: [adminId], references: [id], onDelete: Cascade)
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([paymentId, createdAt])
+  @@map("payment_action_logs")
+}
+
+model AdminSession {
+  id               String   @id @default(uuid())
+  adminId          String
+  admin            User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  refreshTokenHash String
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+
+  @@index([adminId, expiresAt])
+  @@index([refreshTokenHash])
+  @@map("admin_sessions")
+}
+
+model NotificationCampaign {
+  id          String   @id @default(uuid())
+  title       String
+  body        String
+  targetType  String
+  payload     Json?
+  sentById    String
+  sentBy      User     @relation("NotificationCampaignActor", fields: [sentById], references: [id], onDelete: Cascade)
+  sentAt      DateTime @default(now())
+  totalSent   Int      @default(0)
+  totalFailed Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([sentById, sentAt])
+  @@map("notification_campaigns")
 }
 
 model Session {

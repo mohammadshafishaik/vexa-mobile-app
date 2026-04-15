@@ -89,21 +89,71 @@ router.post('/kyc', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const user = await prisma.user.update({
-      where: { id: req.user!.userId },
-      data: {
-        kycDocuments,
-        kycStatus: 'PENDING',
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isVerified: true,
-        kycDocuments: true,
-        kycStatus: true,
-      },
+    const normalizedDocs = kycDocuments
+      .map((doc: unknown) => String(doc || '').trim())
+      .filter((doc: string) => !!doc);
+
+    if (normalizedDocs.length === 0) {
+      res.status(400).json({ success: false, message: 'kycDocuments must contain valid document URLs' });
+      return;
+    }
+
+    const parsedDocuments = normalizedDocs.map((doc: string) => {
+      const [rawType, rawValue] = doc.includes('|') ? doc.split('|', 2) : ['OTHER', doc];
+      const normalizedType = String(rawType || 'OTHER').trim().toUpperCase();
+      const documentType = ['AADHAAR', 'PAN', 'OTHER'].includes(normalizedType) ? normalizedType : 'OTHER';
+      const fileUrl = String(rawValue || '').trim();
+      const fileKey = fileUrl.split('/').filter(Boolean).pop() || `${documentType.toLowerCase()}-${Date.now()}`;
+
+      return {
+        documentType: documentType as 'AADHAAR' | 'PAN' | 'OTHER',
+        fileUrl,
+        fileKey,
+      };
+    }).filter((doc) => !!doc.fileUrl);
+
+    if (parsedDocuments.length === 0) {
+      res.status(400).json({ success: false, message: 'No valid KYC document entries found' });
+      return;
+    }
+
+    const user = await prisma.$transaction(async (tx) => {
+      await tx.kycDocument.deleteMany({
+        where: {
+          userId: req.user!.userId,
+          documentType: {
+            in: parsedDocuments.map((doc) => doc.documentType),
+          },
+        },
+      });
+
+      await tx.kycDocument.createMany({
+        data: parsedDocuments.map((doc) => ({
+          userId: req.user!.userId,
+          documentType: doc.documentType,
+          fileUrl: doc.fileUrl,
+          fileKey: doc.fileKey,
+          status: 'PENDING',
+        })),
+      });
+
+      return tx.user.update({
+        where: { id: req.user!.userId },
+        data: {
+          kycDocuments: normalizedDocs,
+          kycStatus: 'PENDING',
+          isVerified: false,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isVerified: true,
+          kycDocuments: true,
+          kycStatus: true,
+        },
+      });
     });
 
     res.json({ success: true, data: user });
@@ -118,7 +168,7 @@ router.post('/kyc', authMiddleware, async (req: Request, res: Response) => {
 router.get('/profile/:userId', authMiddleware, async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.params.userId },
+      where: { id: String(req.params.userId) },
       select: {
         id: true,
         name: true,

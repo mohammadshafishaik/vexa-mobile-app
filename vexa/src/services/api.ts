@@ -1,11 +1,10 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
-
-const PRODUCTION_BACKEND_URL = 'https://vexa-backend-hx9v.onrender.com';
+import { API_BASE_URL, BACKEND_URL } from '../config/backend';
 
 // Export BACKEND_URL for better-auth and Socket.io clients (without /api suffix).
-export const BACKEND_URL = PRODUCTION_BACKEND_URL;
-const BASE_URL = `${BACKEND_URL}/api`;
+export { BACKEND_URL };
+const BASE_URL = API_BASE_URL;
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -75,7 +74,7 @@ api.interceptors.response.use(
         // Retry original request with new token
         originalRequest.headers.Authorization = `Bearer ${newTokens.accessToken}`;
         return api(originalRequest);
-      } catch (refreshError) {
+      } catch {
         // Refresh failed — force logout
         useAuthStore.getState().logout();
         return Promise.reject(error);
