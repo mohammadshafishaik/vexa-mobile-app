@@ -5,6 +5,7 @@ import prisma from '../lib/prisma';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { authMiddleware } from '../middleware/auth';
 import { sendPasswordResetEmail, isEmailConfigured } from '../lib/email';
+import { getAccountAccessBlock, shouldAutoReactivateSuspendedAccount } from '../utils/accountStatus';
 import {
   validateRegistration,
   validateLogin,
@@ -25,6 +26,9 @@ const authUserSelect = {
   avatarUrl: true,
   phone: true,
   role: true,
+  accountStatus: true,
+  suspendedUntil: true,
+  banReason: true,
   isVerified: true,
   kycStatus: true,
   kycDocuments: true,
@@ -45,6 +49,52 @@ const toPublicUser = (user: any) => ({
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
+
+const ensureAccountAccess = async (
+  user: {
+    id: string;
+    accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
+    suspendedUntil?: Date | null;
+    banReason?: string | null;
+  },
+  res: Response,
+): Promise<boolean> => {
+  let accountStatus = user.accountStatus;
+  let suspendedUntil = user.suspendedUntil ?? null;
+  let banReason = user.banReason ?? null;
+
+  if (shouldAutoReactivateSuspendedAccount(user)) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        accountStatus: 'ACTIVE',
+        suspendedUntil: null,
+        banReason: null,
+      },
+    });
+
+    accountStatus = 'ACTIVE';
+    suspendedUntil = null;
+    banReason = null;
+  }
+
+  const accountBlock = getAccountAccessBlock({
+    accountStatus,
+    suspendedUntil,
+    banReason,
+  });
+
+  if (accountBlock) {
+    res.status(accountBlock.statusCode).json({
+      success: false,
+      code: accountBlock.code,
+      message: accountBlock.message,
+    });
+    return false;
+  }
+
+  return true;
+};
 
 const isSchemaMismatchError = (error: any): boolean => {
   const message = String(error?.message || '').toLowerCase();
@@ -221,6 +271,10 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
+    if (!await ensureAccountAccess(user, res)) {
+      return;
+    }
+
     if (!user.password) {
       res.status(401).json({
         success: false,
@@ -298,6 +352,10 @@ router.post('/google', async (req: Request, res: Response) => {
         isVerified: true,
         role: 'CUSTOMER', // Default, can be changed later
       });
+    }
+
+    if (!await ensureAccountAccess(user, res)) {
+      return;
     }
 
     const tokenPayload = { userId: user.id, email: user.email, role: user.role };
@@ -496,10 +554,17 @@ router.post('/refresh', async (req: Request, res: Response) => {
         id: true,
         email: true,
         role: true,
+        accountStatus: true,
+        suspendedUntil: true,
+        banReason: true,
       },
     });
     if (!user) {
       res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    if (!await ensureAccountAccess(user, res)) {
       return;
     }
 

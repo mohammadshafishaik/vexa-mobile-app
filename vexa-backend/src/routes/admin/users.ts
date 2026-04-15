@@ -4,6 +4,7 @@ import prisma from '../../lib/prisma';
 import { adminAuthMiddleware } from '../../middleware/admin/adminAuth';
 import { requireAdminRole } from '../../middleware/admin/requireAdminRole';
 import { logAdminAction } from '../../utils/admin/audit';
+import { createAndPushNotification } from '../../utils/notificationHelper';
 
 const router = Router();
 
@@ -13,6 +14,60 @@ const parsePage = (value: unknown, fallback: number): number => {
   const parsed = Number(value);
   if (Number.isNaN(parsed) || parsed <= 0) return fallback;
   return Math.floor(parsed);
+};
+
+const formatAdminDateTime = (value: Date): string => {
+  return new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(value);
+};
+
+const buildStatusNotificationPayload = ({
+  accountStatus,
+  previousStatus,
+  reason,
+  suspendedUntil,
+}: {
+  accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
+  previousStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
+  reason?: string | null;
+  suspendedUntil?: Date | null;
+}) => {
+  const cleanReason = reason?.trim() || null;
+
+  if (accountStatus === 'BANNED') {
+    return {
+      title: 'Account Banned',
+      body: cleanReason
+        ? `Your Vexa account has been banned. Reason: ${cleanReason}`
+        : 'Your Vexa account has been banned by the admin team.',
+    };
+  }
+
+  if (accountStatus === 'SUSPENDED') {
+    const untilText = suspendedUntil
+      ? ` until ${formatAdminDateTime(suspendedUntil)}`
+      : '';
+    const reasonText = cleanReason ? ` Reason: ${cleanReason}` : '';
+
+    return {
+      title: 'Account Suspended',
+      body: `Your Vexa account has been suspended${untilText}.${reasonText}`.trim(),
+    };
+  }
+
+  if (accountStatus === 'DELETED') {
+    return {
+      title: 'Account Deactivated',
+      body: 'Your Vexa account has been deactivated. Contact support for assistance.',
+    };
+  }
+
+  return {
+    title: previousStatus === 'BANNED' ? 'Account Unbanned' : 'Account Reactivated',
+    body: 'Your Vexa account is active again. You can continue using all app features.',
+  };
 };
 
 const applyUserStatusChange = async ({
@@ -36,6 +91,7 @@ const applyUserStatusChange = async ({
   }
 
   const updateData: any = { accountStatus };
+  const previousStatus = user.accountStatus;
 
   if (accountStatus === 'SUSPENDED') {
     updateData.suspendedUntil = suspendedUntil ? new Date(suspendedUntil) : null;
@@ -87,6 +143,30 @@ const applyUserStatusChange = async ({
     newState: updated,
     req,
   });
+
+  try {
+    const notificationPayload = buildStatusNotificationPayload({
+      accountStatus,
+      previousStatus,
+      reason: accountStatus === 'ACTIVE' ? null : updated.banReason,
+      suspendedUntil: updated.suspendedUntil,
+    });
+
+    await createAndPushNotification({
+      userId: user.id,
+      type: 'SYSTEM',
+      title: notificationPayload.title,
+      body: notificationPayload.body,
+      data: {
+        accountStatus: updated.accountStatus,
+        previousStatus,
+        suspendedUntil: updated.suspendedUntil ? updated.suspendedUntil.toISOString() : null,
+        reason: updated.banReason || null,
+      },
+    });
+  } catch (notificationError) {
+    console.error('Failed to create account-status notification:', notificationError);
+  }
 
   return updated;
 };

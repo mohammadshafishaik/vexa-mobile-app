@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import prisma from '../lib/prisma';
 import { verifyAccessToken, TokenPayload } from '../utils/jwt';
+import { getAccountAccessBlock, shouldAutoReactivateSuspendedAccount } from '../utils/accountStatus';
 
 // Extend Express Request
 declare global {
@@ -10,7 +12,7 @@ declare global {
   }
 }
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -22,6 +24,54 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 
   try {
     const decoded = verifyAccessToken(token);
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        accountStatus: true,
+        suspendedUntil: true,
+        banReason: true,
+      },
+    });
+
+    if (!user) {
+      res.status(401).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    let effectiveStatus = user.accountStatus;
+    let effectiveSuspendedUntil = user.suspendedUntil;
+
+    if (shouldAutoReactivateSuspendedAccount(user)) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          accountStatus: 'ACTIVE',
+          suspendedUntil: null,
+          banReason: null,
+        },
+      });
+
+      effectiveStatus = 'ACTIVE';
+      effectiveSuspendedUntil = null;
+    }
+
+    const accessBlock = getAccountAccessBlock({
+      accountStatus: effectiveStatus,
+      suspendedUntil: effectiveSuspendedUntil,
+      banReason: user.banReason,
+    });
+
+    if (accessBlock) {
+      res.status(accessBlock.statusCode).json({
+        success: false,
+        code: accessBlock.code,
+        message: accessBlock.message,
+      });
+      return;
+    }
+
     req.user = decoded;
     next();
   } catch (error) {
