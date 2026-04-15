@@ -116,7 +116,7 @@ setIO(io);
 app.use(helmet());
 app.use(cors({
   origin: corsOrigin,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   credentials: true,
 }));
 
