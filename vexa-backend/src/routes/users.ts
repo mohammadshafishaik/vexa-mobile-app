@@ -132,7 +132,7 @@ router.post('/kyc', authMiddleware, async (req: Request, res: Response) => {
     }
 
     const normalizedStatus = String(existingUser.kycStatus || '').toUpperCase();
-    if (existingUser.isVerified || normalizedStatus === 'VERIFIED') {
+    if (normalizedStatus === 'VERIFIED') {
       res.status(400).json({
         success: false,
         message: 'Your profile is already verified. Reverification is not required.',

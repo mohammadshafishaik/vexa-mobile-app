@@ -146,7 +146,7 @@ const createUserCompat = async (data: {
       ['password', data.password ?? null],
       ['googleId', data.googleId ?? null],
       ['avatarUrl', data.avatarUrl ?? null],
-      ['isVerified', data.isVerified ?? true],
+      ['isVerified', data.isVerified ?? false],
       ['createdAt', now],
       ['updatedAt', now],
     ];
@@ -222,7 +222,7 @@ router.post('/register', async (req: Request, res: Response) => {
       phone: phone ? phone.replace(/\D/g, '').slice(-10) : null,
       role,
       password: hashedPassword,
-      isVerified: true,
+      isVerified: false,
     });
 
     const tokenPayload = { userId: user.id, email: user.email, role: user.role };
@@ -349,7 +349,7 @@ router.post('/google', async (req: Request, res: Response) => {
         name: name || email.split('@')[0],
         googleId,
         avatarUrl: photoUrl || null,
-        isVerified: true,
+        isVerified: false,
         role: 'CUSTOMER', // Default, can be changed later
       });
     }

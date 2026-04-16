@@ -42,6 +42,7 @@ import { formatCurrency, formatRelativeTime } from '../../utils/helpers';
 import { jobService } from '../../services/jobs';
 import api from '../../services/api';
 import { resolveImageUrl } from '../../utils/image';
+import { isKycVerifiedStatus } from '../../utils/kyc';
 
 type JobDetailRoute = RouteProp<CustomerStackParamList, 'JobDetail'>;
 
@@ -312,7 +313,7 @@ const JobDetailScreen: React.FC = () => {
                   <View style={{ flex: 1, marginLeft: spacing[3] }}>
                     <VerifiedName
                       name={bid.provider?.name ?? 'Provider'}
-                      isVerified={Boolean(bid.provider?.isVerified)}
+                      isVerified={isKycVerifiedStatus(bid.provider?.kycStatus)}
                       textStyle={styles.providerName}
                     />
                     <Text style={styles.providerMeta}>{bid.message}</Text>
@@ -338,7 +339,7 @@ const JobDetailScreen: React.FC = () => {
                 <View style={styles.providerInfo}>
                   <VerifiedName
                     name={job.selectedProvider.name}
-                    isVerified={Boolean(job.selectedProvider.isVerified)}
+                    isVerified={isKycVerifiedStatus(job.selectedProvider.kycStatus)}
                     textStyle={styles.providerName}
                   />
                   <Text style={styles.providerMeta}>

@@ -24,6 +24,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { ServiceRequest } from '../../types';
 import { formatCurrency, formatRelativeTime } from '../../utils/helpers';
 import api from '../../services/api';
+import { isKycVerifiedStatus } from '../../utils/kyc';
 
 const ProviderDashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -111,7 +112,7 @@ const ProviderDashboardScreen: React.FC = () => {
             <Avatar name={item.customer.name} size="sm" />
             <VerifiedName
               name={item.customer.name}
-              isVerified={Boolean(item.customer.isVerified)}
+              isVerified={isKycVerifiedStatus(item.customer.kycStatus)}
               textStyle={styles.customerName}
             />
           </View>

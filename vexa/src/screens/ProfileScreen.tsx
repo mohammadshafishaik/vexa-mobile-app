@@ -35,6 +35,7 @@ import { socketService } from '../services/socket';
 import api from '../services/api';
 import { uploadService } from '../services/upload';
 import { userService } from '../services/users';
+import { deriveKycDisplayStatus } from '../utils/kyc';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -100,20 +101,24 @@ const ProfileScreen: React.FC = () => {
     );
   };
 
-  const currentKycStatus = String(user?.kycStatus || 'PENDING').toUpperCase();
   const kycDocuments = Array.isArray(user?.kycDocuments) ? user.kycDocuments : [];
-  const isVerifiedUser = Boolean(user?.isVerified) || currentKycStatus === 'VERIFIED';
-  const isRejectedKyc = currentKycStatus === 'REJECTED' || currentKycStatus === 'FAILED';
+  const kycDisplayStatus = deriveKycDisplayStatus({
+    kycStatus: user?.kycStatus,
+    kycDocuments,
+  });
+  const isVerifiedUser = kycDisplayStatus === 'VERIFIED';
+  const isRejectedKyc = kycDisplayStatus === 'REJECTED';
   const hasSubmittedKycDocuments = kycDocuments.length > 0;
-  const canSubmitVerification = !isVerifiedUser && (isRejectedKyc || !hasSubmittedKycDocuments);
+  const canSubmitVerification = kycDisplayStatus === 'REJECTED' || kycDisplayStatus === 'NOT_SUBMITTED';
+  const verificationBadgeLabel = kycDisplayStatus === 'NOT_SUBMITTED' ? 'NOT SUBMITTED' : kycDisplayStatus;
 
   const verificationMessage = isVerifiedUser
-    ? 'Your profile is verified. Others will see your blue verified badge when you post jobs or place bids.'
+    ? 'Your profile is verified. Your blue badge is visible beside your name in profile, bids, and job posts.'
     : isRejectedKyc
       ? 'Verification failed. Tap Reverify to upload Aadhaar or PAN again.'
       : hasSubmittedKycDocuments
         ? 'Your documents are under review. You will be notified once verification is complete.'
-        : 'Upload Aadhaar or PAN for verification. Admin will review and approve your profile.';
+        : 'Upload Aadhaar or PAN to start verification. Admin will review and approve your profile.';
 
   const verificationActionTitle = isRejectedKyc ? 'Reverify' : 'Upload Aadhaar / PAN';
 
@@ -266,13 +271,15 @@ const ProfileScreen: React.FC = () => {
             <View style={styles.verificationHeaderRow}>
               <Text style={styles.verificationTitle}>Identity Verification</Text>
               <Badge
-                label={currentKycStatus}
+                label={verificationBadgeLabel}
                 color={
-                  currentKycStatus === 'VERIFIED'
+                  kycDisplayStatus === 'VERIFIED'
                     ? colors.success
-                    : currentKycStatus === 'REJECTED'
+                    : kycDisplayStatus === 'REJECTED'
                     ? colors.error
-                    : colors.warning
+                    : kycDisplayStatus === 'PENDING'
+                    ? colors.warning
+                    : colors.gray500
                 }
                 variant="filled"
                 size="sm"

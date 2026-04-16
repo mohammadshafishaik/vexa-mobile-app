@@ -40,6 +40,7 @@ import { socketService } from '../../services/socket';
 import { SOCKET_EVENTS } from '../../utils/constants';
 import api from '../../services/api';
 import { resolveImageUrl } from '../../utils/image';
+import { isKycVerifiedStatus } from '../../utils/kyc';
 
 type LiveBiddingRoute = RouteProp<CustomerStackParamList, 'LiveBidding'>;
 
@@ -257,7 +258,7 @@ const LiveBiddingScreen: React.FC = () => {
             <View style={styles.bidUserMeta}>
               <VerifiedName
                 name={item.provider?.name ?? 'Service Provider'}
-                isVerified={Boolean(item.provider?.isVerified)}
+                isVerified={isKycVerifiedStatus(item.provider?.kycStatus)}
                 textStyle={styles.bidUserName}
               />
               <Text style={styles.bidDuration}>

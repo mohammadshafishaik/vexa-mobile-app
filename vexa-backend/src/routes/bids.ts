@@ -60,7 +60,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
           estimatedDuration,
         },
         include: {
-          provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+          provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
         },
       });
 
@@ -90,7 +90,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         estimatedDuration,
       },
       include: {
-        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
       },
     });
 
@@ -129,7 +129,7 @@ router.get('/job/:jobId', authMiddleware, async (req: Request, res: Response) =>
     const bids = await prisma.bid.findMany({
       where: { jobId: req.params.jobId as string },
       include: {
-        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
       },
       orderBy: { amount: 'asc' },
     });
@@ -226,7 +226,7 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
         ...(estimatedDuration && { estimatedDuration }),
       },
       include: {
-        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
       },
     });
 

@@ -76,9 +76,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       prisma.serviceRequest.findMany({
         where,
         include: {
-          customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
-          selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
-          bids: { include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } } } },
+          customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+          selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+          bids: { include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } } } },
           modifications: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -139,7 +139,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         status: 'BIDDING',
       },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
       },
     });
 
@@ -158,10 +158,10 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
     const job = await prisma.serviceRequest.findUnique({
       where: { id: req.params.id as string },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
         bids: {
-          include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } } },
+          include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } } },
           orderBy: { amount: 'asc' },
         },
         modifications: { orderBy: { createdAt: 'desc' } },
@@ -194,8 +194,8 @@ router.patch('/:id/status', authMiddleware, async (req: Request, res: Response) 
       where: { id: req.params.id as string },
       data: { status },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
       },
     });
 
@@ -238,8 +238,8 @@ router.patch('/:id/complete', authMiddleware, async (req: Request, res: Response
         completedImages: completedImages || [],
       },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
       },
     });
 
@@ -287,8 +287,8 @@ router.patch('/:id/accept-work', authMiddleware, async (req: Request, res: Respo
       where: { id: jobId },
       data: { status: 'PAYMENT_PENDING' },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
       },
     });
 
