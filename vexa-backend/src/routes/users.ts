@@ -117,6 +117,29 @@ router.post('/kyc', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    const existingUser = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: {
+        id: true,
+        isVerified: true,
+        kycStatus: true,
+      },
+    });
+
+    if (!existingUser) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    const normalizedStatus = String(existingUser.kycStatus || '').toUpperCase();
+    if (existingUser.isVerified || normalizedStatus === 'VERIFIED') {
+      res.status(400).json({
+        success: false,
+        message: 'Your profile is already verified. Reverification is not required.',
+      });
+      return;
+    }
+
     const user = await prisma.$transaction(async (tx) => {
       await tx.kycDocument.deleteMany({
         where: {

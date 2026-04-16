@@ -15,6 +15,7 @@ import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
 import { JobStatusBadge } from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
+import VerifiedName from '../../components/ui/VerifiedName';
 import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
@@ -108,7 +109,11 @@ const ProviderDashboardScreen: React.FC = () => {
         {item.customer && (
           <View style={styles.customerRow}>
             <Avatar name={item.customer.name} size="sm" />
-            <Text style={styles.customerName}>{item.customer.name}</Text>
+            <VerifiedName
+              name={item.customer.name}
+              isVerified={Boolean(item.customer.isVerified)}
+              textStyle={styles.customerName}
+            />
           </View>
         )}
 

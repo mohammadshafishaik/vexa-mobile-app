@@ -31,6 +31,7 @@ import GlassCard from '../../components/ui/GlassCard';
 import Button from '../../components/ui/Button';
 import { JobStatusBadge } from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
+import VerifiedName from '../../components/ui/VerifiedName';
 import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
@@ -309,7 +310,11 @@ const JobDetailScreen: React.FC = () => {
                 <View key={bid.id} style={styles.bidRow}>
                   <Avatar name={bid.provider?.name ?? 'Provider'} size="sm" />
                   <View style={{ flex: 1, marginLeft: spacing[3] }}>
-                    <Text style={styles.providerName}>{bid.provider?.name}</Text>
+                    <VerifiedName
+                      name={bid.provider?.name ?? 'Provider'}
+                      isVerified={Boolean(bid.provider?.isVerified)}
+                      textStyle={styles.providerName}
+                    />
                     <Text style={styles.providerMeta}>{bid.message}</Text>
                   </View>
                   <Text style={styles.priceValue}>{formatCurrency(bid.amount)}</Text>
@@ -331,9 +336,11 @@ const JobDetailScreen: React.FC = () => {
                   size="lg"
                 />
                 <View style={styles.providerInfo}>
-                  <Text style={styles.providerName}>
-                    {job.selectedProvider.name}
-                  </Text>
+                  <VerifiedName
+                    name={job.selectedProvider.name}
+                    isVerified={Boolean(job.selectedProvider.isVerified)}
+                    textStyle={styles.providerName}
+                  />
                   <Text style={styles.providerMeta}>
                     {job.selectedProvider.email}
                   </Text>

@@ -26,6 +26,7 @@ import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
 import Button from '../../components/ui/Button';
 import Avatar from '../../components/ui/Avatar';
+import VerifiedName from '../../components/ui/VerifiedName';
 import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
@@ -254,9 +255,11 @@ const LiveBiddingScreen: React.FC = () => {
               size="md"
             />
             <View style={styles.bidUserMeta}>
-              <Text style={styles.bidUserName}>
-                {item.provider?.name ?? 'Service Provider'}
-              </Text>
+              <VerifiedName
+                name={item.provider?.name ?? 'Service Provider'}
+                isVerified={Boolean(item.provider?.isVerified)}
+                textStyle={styles.bidUserName}
+              />
               <Text style={styles.bidDuration}>
                 <Clock size={12} color={colors.gray500} /> {item.estimatedDuration}
               </Text>

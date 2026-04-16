@@ -26,6 +26,7 @@ import GlassCard from '../components/ui/GlassCard';
 import Avatar from '../components/ui/Avatar';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
+import VerifiedName from '../components/ui/VerifiedName';
 import { colors } from '../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
@@ -101,6 +102,20 @@ const ProfileScreen: React.FC = () => {
 
   const currentKycStatus = String(user?.kycStatus || 'PENDING').toUpperCase();
   const kycDocuments = Array.isArray(user?.kycDocuments) ? user.kycDocuments : [];
+  const isVerifiedUser = Boolean(user?.isVerified) || currentKycStatus === 'VERIFIED';
+  const isRejectedKyc = currentKycStatus === 'REJECTED' || currentKycStatus === 'FAILED';
+  const hasSubmittedKycDocuments = kycDocuments.length > 0;
+  const canSubmitVerification = !isVerifiedUser && (isRejectedKyc || !hasSubmittedKycDocuments);
+
+  const verificationMessage = isVerifiedUser
+    ? 'Your profile is verified. Others will see your blue verified badge when you post jobs or place bids.'
+    : isRejectedKyc
+      ? 'Verification failed. Tap Reverify to upload Aadhaar or PAN again.'
+      : hasSubmittedKycDocuments
+        ? 'Your documents are under review. You will be notified once verification is complete.'
+        : 'Upload Aadhaar or PAN for verification. Admin will review and approve your profile.';
+
+  const verificationActionTitle = isRejectedKyc ? 'Reverify' : 'Upload Aadhaar / PAN';
 
   const pickAndUploadKycDocument = async (docType: 'AADHAAR' | 'PAN') => {
     setIsKycUploading(true);
@@ -206,7 +221,11 @@ const ProfileScreen: React.FC = () => {
             imageUrl={user?.avatarUrl}
             size="xl"
           />
-          <Text style={styles.userName}>{user?.name ?? 'VEXA User'}</Text>
+          <VerifiedName
+            name={user?.name ?? 'VEXA User'}
+            isVerified={isVerifiedUser}
+            textStyle={styles.userName}
+          />
           <Text style={styles.userEmail}>{user?.email ?? 'user@vexa.app'}</Text>
           <Badge
             label={user?.role ?? 'CUSTOMER'}
@@ -260,23 +279,25 @@ const ProfileScreen: React.FC = () => {
               />
             </View>
             <Text style={styles.verificationText}>
-              Upload Aadhaar or PAN for verification. Admin will review and approve your profile.
+              {verificationMessage}
             </Text>
             {kycDocuments.length > 0 && (
               <Text style={styles.verificationMetaText}>
                 Documents submitted: {kycDocuments.length}
               </Text>
             )}
-            <Button
-              title={isKycUploading ? 'Uploading...' : 'Upload Aadhaar / PAN'}
-              onPress={handleUploadVerification}
-              variant="secondary"
-              size="md"
-              fullWidth
-              loading={isKycUploading}
-              disabled={isKycUploading}
-              style={{ marginTop: spacing[3] }}
-            />
+            {canSubmitVerification && (
+              <Button
+                title={isKycUploading ? 'Uploading...' : verificationActionTitle}
+                onPress={handleUploadVerification}
+                variant="secondary"
+                size="md"
+                fullWidth
+                loading={isKycUploading}
+                disabled={isKycUploading}
+                style={{ marginTop: spacing[3] }}
+              />
+            )}
           </GlassCard>
         </Animated.View>
 
