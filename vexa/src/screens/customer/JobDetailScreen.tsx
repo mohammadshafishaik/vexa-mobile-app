@@ -40,6 +40,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { JobStatus, CustomerStackParamList, ServiceRequest } from '../../types';
 import { formatCurrency, formatRelativeTime } from '../../utils/helpers';
 import { jobService } from '../../services/jobs';
+import { paymentService } from '../../services/payments';
 import api from '../../services/api';
 import { resolveImageUrl } from '../../utils/image';
 import { isKycVerifiedStatus } from '../../utils/kyc';
@@ -66,6 +67,16 @@ const JobDetailScreen: React.FC = () => {
     && job
     && ['ACCEPTED', 'IN_PROGRESS', 'ON_SITE_INSPECTION'].includes(job.status)
     && job.modificationCount < job.maxModifications
+  );
+  const latestPayment = job?.payments?.length
+    ? [...job.payments].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )[0]
+    : null;
+  const isCashPaymentAwaitingProviderConfirmation = (
+    job?.status === JobStatus.PAYMENT_PENDING
+    && latestPayment?.paymentMethod === 'CASH'
+    && latestPayment?.status === 'PENDING'
   );
 
   useFocusEffect(
@@ -181,6 +192,34 @@ const JobDetailScreen: React.FC = () => {
 
   const handleRaiseDispute = () => {
     navigation.navigate('Dispute', { jobId });
+  };
+
+  const handleConfirmCashReceived = () => {
+    Alert.alert(
+      'Confirm Cash Receipt',
+      'Please confirm only if you have received cash from the customer.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Received',
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              const response = await paymentService.confirmCashReceived(jobId);
+              if (response?.job) {
+                setJob(response.job);
+                setSelectedJob(response.job);
+              }
+              Alert.alert('Confirmed', 'Cash receipt confirmed. Job is now marked as paid.');
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.message || 'Failed to confirm cash receipt');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading) {
@@ -440,7 +479,7 @@ const JobDetailScreen: React.FC = () => {
           )}
 
           {/* PAYMENT_PENDING: Customer can pay */}
-          {job?.status === JobStatus.PAYMENT_PENDING && isCustomer && (
+          {job?.status === JobStatus.PAYMENT_PENDING && isCustomer && !isCashPaymentAwaitingProviderConfirmation && (
             <Button
               title="Make Payment"
               onPress={handlePayment}
@@ -452,7 +491,31 @@ const JobDetailScreen: React.FC = () => {
           )}
 
           {/* PAYMENT_PENDING: Provider sees waiting */}
-          {job?.status === JobStatus.PAYMENT_PENDING && isAssignedProvider && (
+          {job?.status === JobStatus.PAYMENT_PENDING && isCustomer && isCashPaymentAwaitingProviderConfirmation && (
+            <GlassCard style={styles.waitingCard}>
+              <View style={styles.waitingRow}>
+                <CreditCard size={20} color={colors.warning} />
+                <Text style={styles.waitingText}>
+                  Cash payment submitted. Waiting for provider to confirm receipt.
+                </Text>
+              </View>
+            </GlassCard>
+          )}
+
+          {job?.status === JobStatus.PAYMENT_PENDING && isAssignedProvider && isCashPaymentAwaitingProviderConfirmation && (
+            <Button
+              title={actionLoading ? 'Confirming...' : 'Confirm Cash Received'}
+              onPress={handleConfirmCashReceived}
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={actionLoading}
+              disabled={actionLoading}
+              icon={<CheckCircle size={18} color={colors.black} />}
+            />
+          )}
+
+          {job?.status === JobStatus.PAYMENT_PENDING && isAssignedProvider && !isCashPaymentAwaitingProviderConfirmation && (
             <GlassCard style={styles.waitingCard}>
               <View style={styles.waitingRow}>
                 <CreditCard size={20} color={colors.warning} />

@@ -99,21 +99,20 @@ const PaymentScreen: React.FC = () => {
 
   const handleCashPay = async () => {
     Alert.alert(
-      'Confirm Cash Payment',
+      'Submit Cash Payment',
       `Are you sure you have paid ₹${total} in cash to the provider?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Yes, I Paid',
+          text: 'Yes, Submit',
           onPress: async () => {
             setIsProcessing(true);
             setError(null);
             try {
               await paymentService.payCash(jobId);
-              updateJob(jobId, { status: 'PAID' as any });
-              Alert.alert('Cash Payment Recorded! ✅', 'Payment has been marked as completed.', [
-                { text: 'Rate Provider', onPress: () => navigation.replace('Rating', { jobId }) },
-                { text: 'Done', onPress: () => navigation.goBack() },
+              updateJob(jobId, { status: 'PAYMENT_PENDING' as any });
+              Alert.alert('Awaiting Provider Confirmation', 'Cash payment was submitted. The provider must confirm receipt before this job is marked paid.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
               ]);
             } catch (err: any) {
               setError(err?.response?.data?.message || err.message || 'Failed to record cash payment');
@@ -251,7 +250,7 @@ const PaymentScreen: React.FC = () => {
                 <Text style={styles.securityText}>
                   {selectedMethod === 'RAZORPAY'
                     ? 'Payment is processed securely via Razorpay. Your payment details are encrypted end-to-end.'
-                    : 'Confirm that you have paid the provider in cash. This will be recorded in our system.'}
+                    : 'Submit cash payment after paying the provider. Job will be marked paid only after provider confirms receipt.'}
                 </Text>
               </View>
             </View>
@@ -261,7 +260,7 @@ const PaymentScreen: React.FC = () => {
         {/* Pay Button */}
         <Animated.View entering={FadeInDown.delay(400).duration(400)}>
           <Button
-            title={selectedMethod === 'RAZORPAY' ? `Pay ${formatCurrency(total)}` : `Confirm Cash Payment`}
+            title={selectedMethod === 'RAZORPAY' ? `Pay ${formatCurrency(total)}` : `Submit Cash Payment`}
             onPress={handlePay}
             variant="primary"
             size="lg"

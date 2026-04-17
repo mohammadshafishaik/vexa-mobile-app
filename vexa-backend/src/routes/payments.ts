@@ -250,7 +250,7 @@ router.get('/history', authMiddleware, async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/payments/cash ─────────────────────────────
-// Instant cash payment — no Razorpay involved
+// Customer submits cash payment; provider confirmation is required
 router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { jobId } = req.body;
@@ -278,12 +278,44 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    if (job.status !== 'PAYMENT_PENDING') {
+      res.status(400).json({
+        success: false,
+        message: `Cash payment cannot be submitted while job status is "${job.status}"`,
+      });
+      return;
+    }
+
+    const existingCashPayment = await prisma.payment.findFirst({
+      where: {
+        jobId,
+        paymentMethod: 'CASH',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingCashPayment?.status === 'PENDING') {
+      res.status(409).json({
+        success: false,
+        message: 'Cash payment is already awaiting provider confirmation',
+      });
+      return;
+    }
+
+    if (existingCashPayment?.status === 'COMPLETED') {
+      res.status(400).json({
+        success: false,
+        message: 'This job already has a confirmed cash payment',
+      });
+      return;
+    }
+
     const amount = job.revisedPrice || job.originalPrice;
     const securityHash = crypto.createHash('sha256')
       .update(`${jobId}-${req.user!.userId}-${job.selectedProviderId}-${amount}-${Date.now()}-cash`)
       .digest('hex');
 
-    // Create completed cash payment record
+    // Create cash payment record in pending state until provider confirms receipt
     const payment = await prisma.payment.create({
       data: {
         jobId,
@@ -293,23 +325,17 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
         currency: 'INR',
         paymentMethod: 'CASH',
         securityHash,
-        status: 'COMPLETED',
+        status: 'PENDING',
       },
-    });
-
-    // Update job status to PAID
-    await prisma.serviceRequest.update({
-      where: { id: jobId },
-      data: { status: 'PAID' },
     });
 
     // Notify provider
     if (job.selectedProviderId) {
       await createAndPushNotification({
         userId: job.selectedProviderId,
-        type: 'PAYMENT_RECEIVED',
-        title: 'Cash Payment Received! 💰',
-        body: `Customer paid ₹${amount} in cash for "${job.title}"`,
+        type: 'SYSTEM',
+        title: 'Confirm Cash Receipt',
+        body: `Customer marked ₹${amount} cash payment for "${job.title}". Confirm once received.`,
         data: { jobId, paymentId: payment.id },
       });
     }
@@ -317,17 +343,110 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
     // Notify customer
     await createAndPushNotification({
       userId: job.customerId,
-      type: 'PAYMENT_COMPLETED',
-      title: 'Payment Confirmed ✅',
-      body: `Your cash payment of ₹${amount} for "${job.title}" is recorded`,
+      type: 'SYSTEM',
+      title: 'Waiting for Provider Confirmation',
+      body: `Your cash payment for "${job.title}" was submitted. Provider confirmation is pending.`,
       data: { jobId, paymentId: payment.id },
     });
 
-    try { getIO().emit('payment:completed', { jobId, payment }); } catch (e) {}
+    try { getIO().emit('payment:pending', { jobId, payment }); } catch (e) {}
 
     res.status(201).json({ success: true, data: payment });
   } catch (error: any) {
     console.error('[Payments] cash error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ─── POST /api/payments/cash/confirm ─────────────────────
+// Provider confirms that cash was received; only then payment becomes completed
+router.post('/cash/confirm', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.body;
+
+    if (!jobId) {
+      res.status(400).json({ success: false, message: 'jobId is required' });
+      return;
+    }
+
+    const job = await prisma.serviceRequest.findUnique({
+      where: { id: jobId },
+      include: { selectedProvider: true, customer: true },
+    });
+
+    if (!job) {
+      res.status(404).json({ success: false, message: 'Job not found' });
+      return;
+    }
+
+    if (!job.selectedProviderId || job.selectedProviderId !== req.user!.userId) {
+      res.status(403).json({ success: false, message: 'Only assigned provider can confirm cash receipt' });
+      return;
+    }
+
+    const pendingCashPayment = await prisma.payment.findFirst({
+      where: {
+        jobId,
+        paymentMethod: 'CASH',
+        status: 'PENDING',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!pendingCashPayment) {
+      res.status(404).json({ success: false, message: 'No pending cash payment found for this job' });
+      return;
+    }
+
+    if (pendingCashPayment.payeeId !== req.user!.userId) {
+      res.status(403).json({ success: false, message: 'You are not authorized to confirm this cash payment' });
+      return;
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedPayment = await tx.payment.update({
+        where: { id: pendingCashPayment.id },
+        data: { status: 'COMPLETED' },
+      });
+
+      const updatedJob = await tx.serviceRequest.update({
+        where: { id: jobId },
+        data: { status: 'PAID' },
+        include: { selectedProvider: true, customer: true },
+      });
+
+      return { updatedPayment, updatedJob };
+    });
+
+    await createAndPushNotification({
+      userId: job.customerId,
+      type: 'PAYMENT_COMPLETED',
+      title: 'Cash Payment Confirmed ✅',
+      body: `Provider confirmed receiving ₹${result.updatedPayment.amount} in cash for "${job.title}"`,
+      data: { jobId, paymentId: result.updatedPayment.id },
+    });
+
+    await createAndPushNotification({
+      userId: req.user!.userId,
+      type: 'PAYMENT_RECEIVED',
+      title: 'Cash Receipt Confirmed',
+      body: `You confirmed cash receipt for "${job.title}"`,
+      data: { jobId, paymentId: result.updatedPayment.id },
+    });
+
+    try {
+      getIO().emit('payment:completed', { jobId, payment: result.updatedPayment, job: result.updatedJob });
+    } catch (e) {}
+
+    res.json({
+      success: true,
+      data: {
+        payment: result.updatedPayment,
+        job: result.updatedJob,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Payments] cash confirm error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

@@ -1,5 +1,6 @@
 import api from './api';
 import { Payment, ApiResponse } from '../types';
+import { ServiceRequest } from '../types';
 
 export const paymentService = {
   /**
@@ -66,11 +67,22 @@ export const paymentService = {
   },
 
   /**
-   * Pay with cash — instant completion, no Razorpay
+   * Submit cash payment request. Provider must confirm receipt.
    */
   payCash: async (jobId: string): Promise<Payment> => {
     const response = await api.post<ApiResponse<Payment>>(
       '/payments/cash',
+      { jobId },
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Provider confirms cash receipt for a job.
+   */
+  confirmCashReceived: async (jobId: string): Promise<{ payment: Payment; job: ServiceRequest }> => {
+    const response = await api.post<ApiResponse<{ payment: Payment; job: ServiceRequest }>>(
+      '/payments/cash/confirm',
       { jobId },
     );
     return response.data.data;
