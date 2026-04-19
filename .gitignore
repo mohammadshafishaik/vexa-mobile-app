@@ -1,6 +1,11 @@
 # Workspace-level private files
 vexa-backend.env
 DEPLOY_WITH_CREDENTIALS.md
+DEPLOY_STEPS_PRIVATE.md
+PRIVATE_CREDENTIALS.md
+vexa-backend/.env
 
 # Local release artifact
 VEXA-latest.apk
+VEXA-final.apk
+.vercel

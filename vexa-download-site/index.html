@@ -3,57 +3,90 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VEXA App Download</title>
-  <meta name="description" content="Download the latest VEXA Android APK." />
+  <title>VEXA | Official Android Download</title>
+  <meta name="description" content="Download the latest official VEXA Android APK directly from GitHub Releases." />
   <link rel="preconnect" href="https://api.github.com" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="page">
-    <section class="hero card">
-      <img src="assets/icon.png" alt="VEXA app icon" class="logo" />
-      <p class="kicker">Official Distribution</p>
-      <h1>Download VEXA Android App</h1>
-      <p class="subtitle">
-        Always install the latest signed APK published on GitHub Releases.
-      </p>
+  <canvas id="flowField" class="flow-field" aria-hidden="true"></canvas>
+  <div class="noise" aria-hidden="true"></div>
+  <div id="cursorDot" class="cursor cursor-dot" aria-hidden="true"></div>
+  <div id="cursorRing" class="cursor cursor-ring" aria-hidden="true"></div>
 
-      <div class="cta-row">
-        <a id="downloadBtn" class="btn" href="#" aria-disabled="true">Loading latest APK...</a>
-        <a class="btn btn-secondary" href="https://github.com/mohammadshafishaik/vexa-mobile-app/releases" target="_blank" rel="noopener noreferrer">
-          View All Releases
-        </a>
+  <header class="topbar reveal">
+    <div class="brand-wrap">
+      <img src="assets/icon.png" alt="VEXA logo" class="brand-logo" />
+      <div>
+        <p class="eyebrow">VEXA</p>
+        <p class="brand-line">Official Android Distribution</p>
+      </div>
+    </div>
+    <a class="top-link" href="https://github.com/mohammadshafishaik/vexa-mobile-app/releases" target="_blank" rel="noopener noreferrer">
+      Browse Releases
+    </a>
+  </header>
+
+  <main class="page">
+    <section class="hero reveal">
+      <div class="hero-copy">
+        <p class="eyebrow">Premium Build Channel</p>
+        <h1>Download The Latest VEXA APK</h1>
+        <p class="subtitle">
+          Fast, verified, and synced with your live GitHub Releases. Install the newest Android build in one tap.
+        </p>
+
+        <div class="cta-row">
+          <a id="downloadBtn" class="btn btn-primary magnetic" href="#" aria-disabled="true">Loading latest APK...</a>
+          <a class="btn btn-ghost magnetic" href="https://github.com/mohammadshafishaik/vexa-mobile-app/releases" target="_blank" rel="noopener noreferrer">
+            View Changelog
+          </a>
+        </div>
+
+        <p id="statusLine" class="status">Fetching latest release metadata...</p>
       </div>
 
-      <p id="statusLine" class="status">Fetching release metadata...</p>
-    </section>
-
-    <section class="grid">
-      <article class="card info">
-        <h2>Latest Release</h2>
+      <aside class="hero-panel tilt">
+        <h2>Release Pulse</h2>
         <ul>
           <li><span>Version</span><strong id="releaseTag">-</strong></li>
           <li><span>Published</span><strong id="releaseDate">-</strong></li>
-          <li><span>APK Name</span><strong id="assetName">-</strong></li>
-          <li><span>APK Size</span><strong id="assetSize">-</strong></li>
-          <li><span>SHA-256</span><strong id="assetSha">See release notes</strong></li>
+          <li><span>Asset</span><strong id="assetName">-</strong></li>
+          <li><span>Size</span><strong id="assetSize">-</strong></li>
+          <li><span>SHA-256</span><strong id="assetSha">Awaiting release...</strong></li>
         </ul>
+      </aside>
+    </section>
+
+    <section class="install-grid reveal">
+      <article class="glass-card tilt">
+        <h3>Install Flow</h3>
+        <ol>
+          <li>Tap Download and wait for APK to finish.</li>
+          <li>Open file from Downloads.</li>
+          <li>Allow install from unknown source if prompted.</li>
+          <li>Launch VEXA and sign in.</li>
+        </ol>
       </article>
 
-      <article class="card info">
-        <h2>Install Steps</h2>
-        <ol>
-          <li>Download the APK using the button above.</li>
-          <li>Open the APK from your Downloads folder.</li>
-          <li>If prompted, allow install from unknown apps for your browser/file manager.</li>
-          <li>Complete installation and open VEXA.</li>
-        </ol>
+      <article class="glass-card tilt">
+        <h3>Security Notes</h3>
+        <p>
+          This page pulls release data directly from the official repository endpoint. Always verify tag and file name before install.
+        </p>
+        <p class="mini-note">Tip: keep only the newest APK to avoid accidental downgrades.</p>
       </article>
     </section>
 
-    <section class="card notes">
-      <h2>Release Notes</h2>
-      <pre id="releaseNotes">Loading...</pre>
+    <section class="notes reveal">
+      <div class="notes-head">
+        <h3>Release Notes</h3>
+        <span class="live-dot"></span>
+      </div>
+      <pre id="releaseNotes">Loading release notes...</pre>
     </section>
   </main>
 
