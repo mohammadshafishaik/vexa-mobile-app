@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function HomePage() {
-  redirect('/dashboard');
+  redirect('https://vexa-download-site.vercel.app');
 }
