@@ -25,6 +25,13 @@ import disputeRoutes from './routes/disputes';
 import uploadRoutes from './routes/upload';
 import userRoutes from './routes/users';
 import adminRoutes from './routes/admin';
+import chatRoutes from './routes/chat';
+import skillRoutes from './routes/skills';
+import cancellationRoutes from './routes/cancellations';
+import portfolioRoutes from './routes/portfolio';
+import locationRoutes from './routes/location';
+import availabilityRoutes from './routes/availability';
+import recommendationRoutes from './routes/recommendations';
 
 
 const app = express();
@@ -167,6 +174,13 @@ app.use('/api/disputes', disputeRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/skills', skillRoutes);
+app.use('/api/cancellations', cancellationRoutes);
+app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/location', locationRoutes);
+app.use('/api/availability', availabilityRoutes);
+app.use('/api/recommendations', recommendationRoutes);
 
 // Socket.io connection
 io.on('connection', (socket) => {
@@ -186,6 +200,33 @@ io.on('connection', (socket) => {
 
   socket.on('bidding:leave', (jobId: string) => {
     socket.leave(`bidding:${jobId}`);
+  });
+
+  // Chat rooms
+  socket.on('chat:join', (jobId: string) => {
+    socket.join(`chat:${jobId}`);
+    console.log(`${socket.id} joined chat room: ${jobId}`);
+  });
+
+  socket.on('chat:leave', (jobId: string) => {
+    socket.leave(`chat:${jobId}`);
+  });
+
+  socket.on('chat:typing', (data: { jobId: string; userId: string; isTyping: boolean }) => {
+    socket.to(`chat:${data.jobId}`).emit('chat:typing', data);
+  });
+
+  // Location updates (provider sends periodic GPS)
+  socket.on('location:update', async (data: { jobId: string; latitude: number; longitude: number }) => {
+    try {
+      // Broadcast to the customer watching this job
+      socket.to(`user:${data.jobId}`).emit('location:provider', {
+        jobId: data.jobId,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {}
   });
 
   socket.on('disconnect', () => {

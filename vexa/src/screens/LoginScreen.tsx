@@ -11,7 +11,7 @@ import {
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
 import { Shield, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import ScreenContainer from '../components/layout/ScreenContainer';
@@ -131,7 +131,7 @@ const LoginScreen: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await GoogleSignin.hasPlayServices();
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
       // Force account chooser when user wants to switch Gmail accounts.
       if (forceAccountPicker) {
@@ -145,15 +145,31 @@ const LoginScreen: React.FC = () => {
         }
       }
 
-      const userInfo = await GoogleSignin.signIn();
-      const idToken = userInfo.data?.idToken;
-      const googleEmail = userInfo.data?.user?.email;
-      const name = userInfo.data?.user?.name;
-      const photoUrl = userInfo.data?.user?.photo;
-      const googleId = userInfo.data?.user?.id;
+      const signInResponse = await GoogleSignin.signIn();
+      if (!isSuccessResponse(signInResponse)) {
+        // User cancelled account selection.
+        return;
+      }
+
+      const googleUser = signInResponse.data;
+      let idToken = googleUser.idToken;
+      const googleEmail = googleUser.user?.email;
+      const name = googleUser.user?.name;
+      const photoUrl = googleUser.user?.photo;
+      const googleId = googleUser.user?.id;
+
+      // Some devices return a null idToken in signIn() response. Fetch fresh tokens as fallback.
+      if (!idToken) {
+        try {
+          const tokenResponse = await GoogleSignin.getTokens();
+          idToken = tokenResponse.idToken || null;
+        } catch {
+          // Fallback failed; validation below will show a clear error.
+        }
+      }
 
       if (!idToken || !googleEmail || !googleId) {
-        throw new Error('Incomplete data from Google');
+        throw new Error('Google account data is incomplete. Please reconfigure Google Sign-In and try again.');
       }
 
       await warmupBackend();
@@ -173,6 +189,12 @@ const LoginScreen: React.FC = () => {
         setGeneralError(response.data.message || 'Google Sign-In failed');
       }
     } catch (error: any) {
+      const serverMessage = error?.response?.data?.message;
+      if (serverMessage) {
+        setGeneralError(serverMessage);
+        return;
+      }
+
       const rawMessage = String(error?.message || '');
       const lowerMessage = rawMessage.toLowerCase();
       const isTimeout = error?.code === 'ECONNABORTED' || lowerMessage.includes('timeout');
@@ -187,8 +209,10 @@ const LoginScreen: React.FC = () => {
         setGeneralError(
           'Google Sign-In is not configured for this app signature yet. Add debug/release SHA-1 and SHA-256 in Firebase, download updated google-services.json, and rebuild the APK.',
         );
-      } else if (error?.code === 'ERR_NETWORK' || lowerMessage.includes('network error')) {
+      } else if (error?.code === 'ERR_NETWORK' || (error?.isAxiosError && lowerMessage.includes('network error'))) {
         setGeneralError('Google account selected, but server is unreachable. Check backend URL and internet connection.');
+      } else if (lowerMessage.includes('network error')) {
+        setGeneralError('Unable to connect to Google services right now. Please check internet and try again.');
       } else if (isTimeout) {
         setGeneralError('Server is waking up (free tier). Please wait 60 seconds and try again.');
       } else {
@@ -277,6 +301,8 @@ const LoginScreen: React.FC = () => {
                 error={passwordError || undefined}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="password"
                 icon={<Lock size={18} color={passwordError ? colors.error : colors.gray500} />}
                 rightIcon={
                   <TouchableOpacity
@@ -330,7 +356,7 @@ const LoginScreen: React.FC = () => {
           >
             <TouchableOpacity
               style={styles.googleButton}
-              onPress={() => handleGoogleSignIn(true)}
+              onPress={() => handleGoogleSignIn(false)}
               activeOpacity={0.7}
             >
               <View style={styles.googleIcon}>

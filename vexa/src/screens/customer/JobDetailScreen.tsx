@@ -25,6 +25,7 @@ import {
   Mail,
   Zap,
   AlertTriangle,
+  MessageCircle,
 } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
@@ -60,6 +61,17 @@ const JobDetailScreen: React.FC = () => {
   const isProvider = currentUser?.role === 'PROVIDER';
   const isCustomer = currentUser?.role === 'CUSTOMER';
   const isAssignedProvider = job?.selectedProviderId === currentUser?.id;
+  const isParticipant = !!job && (job.customerId === currentUser?.id || job.selectedProviderId === currentUser?.id);
+  const canOpenProviderChat = !!(
+    job?.selectedProviderId
+    && isParticipant
+    && ![JobStatus.POSTED, JobStatus.BIDDING, JobStatus.CANCELLED].includes(job.status)
+  );
+  const canTrackProviderLocation = !!(
+    job?.selectedProviderId
+    && isCustomer
+    && [JobStatus.ACCEPTED, JobStatus.ON_SITE_INSPECTION, JobStatus.IN_PROGRESS].includes(job.status)
+  );
   const hasCurrentUserRated = !!job?.ratings?.some((r) => r.raterId === currentUser?.id);
   const pendingModification = job?.modifications?.find((m) => m.approvalStatus === 'PENDING') || job?.modifications?.[0];
   const canRequestModification = !!(
@@ -102,6 +114,19 @@ const JobDetailScreen: React.FC = () => {
 
   const handleViewBids = () => {
     navigation.navigate('LiveBidding', { jobId });
+  };
+
+  const handleOpenChat = () => {
+    navigation.navigate('Chat', { jobId });
+  };
+
+  const handleViewProviderProfile = () => {
+    if (!job?.selectedProviderId) return;
+    navigation.navigate('ProviderProfile', { userId: job.selectedProviderId });
+  };
+
+  const handleTrackProviderLocation = () => {
+    navigation.navigate('ProviderLocation', { jobId });
   };
 
   const handlePayment = () => {
@@ -347,7 +372,17 @@ const JobDetailScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Bids ({job.bids.length})</Text>
             <GlassCard style={styles.providerCard}>
               {job.bids.slice(0, 3).map((bid: any) => (
-                <View key={bid.id} style={styles.bidRow}>
+                <TouchableOpacity
+                  key={bid.id}
+                  style={styles.bidRow}
+                  onPress={() => {
+                    if (isCustomer && bid.provider?.id) {
+                      navigation.navigate('ProviderProfile', { userId: bid.provider.id });
+                    }
+                  }}
+                  disabled={!isCustomer || !bid.provider?.id}
+                  activeOpacity={isCustomer ? 0.7 : 1}
+                >
                   <Avatar name={bid.provider?.name ?? 'Provider'} size="sm" />
                   <View style={{ flex: 1, marginLeft: spacing[3] }}>
                     <VerifiedName
@@ -358,7 +393,7 @@ const JobDetailScreen: React.FC = () => {
                     <Text style={styles.providerMeta}>{bid.message}</Text>
                   </View>
                   <Text style={styles.priceValue}>{formatCurrency(bid.amount)}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </GlassCard>
           </Animated.View>
@@ -385,6 +420,39 @@ const JobDetailScreen: React.FC = () => {
                     {job.selectedProvider.email}
                   </Text>
                 </View>
+              </View>
+
+              <View style={styles.providerActionsRow}>
+                <TouchableOpacity
+                  style={styles.providerActionButton}
+                  onPress={handleViewProviderProfile}
+                  activeOpacity={0.8}
+                >
+                  <User size={16} color={colors.white} />
+                  <Text style={styles.providerActionText}>View Profile</Text>
+                </TouchableOpacity>
+
+                {canOpenProviderChat && (
+                  <TouchableOpacity
+                    style={styles.providerActionButton}
+                    onPress={handleOpenChat}
+                    activeOpacity={0.8}
+                  >
+                    <MessageCircle size={16} color={colors.white} />
+                    <Text style={styles.providerActionText}>Chat</Text>
+                  </TouchableOpacity>
+                )}
+
+                {canTrackProviderLocation && (
+                  <TouchableOpacity
+                    style={styles.providerActionButton}
+                    onPress={handleTrackProviderLocation}
+                    activeOpacity={0.8}
+                  >
+                    <MapPin size={16} color={colors.white} />
+                    <Text style={styles.providerActionText}>Track Live</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </GlassCard>
           </Animated.View>
@@ -705,6 +773,28 @@ const styles = StyleSheet.create({
   providerInfo: {
     marginLeft: spacing[4],
     flex: 1,
+  },
+  providerActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+    marginTop: spacing[3],
+  },
+  providerActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    backgroundColor: colors.gray800,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  },
+  providerActionText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: fontSizes.sm,
+    color: colors.white,
   },
   providerName: {
     fontFamily: fontFamilies.semibold,

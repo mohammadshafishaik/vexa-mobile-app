@@ -59,7 +59,16 @@ export enum NotificationType {
   DISPUTE_RESOLVED = 'DISPUTE_RESOLVED',
   RATING_RECEIVED = 'RATING_RECEIVED',
   SYSTEM = 'SYSTEM',
+  CANCELLATION = 'CANCELLATION',
+  NEW_MESSAGE = 'NEW_MESSAGE',
+  LOCATION_UPDATE = 'LOCATION_UPDATE',
 }
+
+export type ProviderAvailabilityStatus = 'ONLINE' | 'OFFLINE' | 'BUSY';
+
+export type CancellationInitiator = 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
+
+export type MessageType = 'TEXT' | 'IMAGE' | 'SYSTEM';
 
 // ─── Models ──────────────────────────────────
 
@@ -70,10 +79,19 @@ export interface User {
   avatarUrl: string | null;
   phone: string | null;
   role: UserRole;
+  bio: string | null;
+  availabilityStatus?: ProviderAvailabilityStatus;
   isVerified: boolean;
   kycStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED' | string;
   kycDocuments?: string[];
   hasPassword?: boolean;
+  skills?: ProviderSkill[];
+  portfolioItems?: PortfolioItem[];
+  completedJobsCount?: number;
+  averageRating?: number;
+  totalRatings?: number;
+  totalEarnings?: number;
+  portfolioCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +122,15 @@ export interface ServiceRequest {
   ratings?: Rating[];
   maxModifications: number;
   modificationCount: number;
+  // Location tracking
+  providerLat?: number | null;
+  providerLng?: number | null;
+  providerLocationUpdatedAt?: string | null;
+  // Cancellation
+  cancellationReason?: string | null;
+  cancellationFee?: number;
+  // Distance (computed by backend)
+  distanceKm?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -150,6 +177,12 @@ export interface Payment {
   razorpayPaymentId: string | null;
   razorpaySignature: string | null;
   securityHash: string | null;
+  // Commission fields
+  platformCommission?: number;
+  commissionRate?: number;
+  gstAmount?: number;
+  gstRate?: number;
+  providerPayout?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -205,6 +238,116 @@ export interface AuditLog {
   createdAt: string;
 }
 
+// ─── New Feature Interfaces ──────────────────
+
+export interface ChatMessage {
+  id: string;
+  jobId: string;
+  senderId: string;
+  sender?: { id: string; name: string; avatarUrl: string | null };
+  receiverId: string;
+  receiver?: { id: string; name: string; avatarUrl: string | null };
+  content: string;
+  messageType: MessageType;
+  imageUrl: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface ChatConversation {
+  jobId: string;
+  jobTitle: string;
+  orderId: string;
+  jobStatus: JobStatus;
+  otherUser: { id: string; name: string; avatarUrl: string | null } | null;
+  lastMessage: {
+    content: string;
+    createdAt: string;
+    senderId: string;
+    isRead: boolean;
+    messageType: MessageType;
+  } | null;
+  unreadCount: number;
+}
+
+export interface ProviderSkill {
+  id: string;
+  providerId?: string;
+  category: string;
+  experienceYears: number;
+  isVerified: boolean;
+  createdAt?: string;
+}
+
+export interface Cancellation {
+  id: string;
+  jobId: string;
+  cancelledById: string;
+  cancelledBy?: User;
+  initiator: CancellationInitiator;
+  reason: string;
+  cancellationFee: number;
+  feePaid: boolean;
+  ratingPenalty: boolean;
+  createdAt: string;
+}
+
+export interface PortfolioItem {
+  id: string;
+  providerId: string;
+  title: string;
+  description: string | null;
+  imageUrl: string;
+  category: string | null;
+  createdAt: string;
+}
+
+export interface ProviderAvailabilitySlot {
+  id: string;
+  providerId: string;
+  dayOfWeek: number; // 0=Sunday, 6=Saturday
+  startTime: string; // "09:00"
+  endTime: string;   // "18:00"
+  isBlocked: boolean;
+}
+
+export interface ProviderLocationData {
+  providerLat: number | null;
+  providerLng: number | null;
+  providerLocationUpdatedAt: string | null;
+  jobLat: number | null;
+  jobLng: number | null;
+  jobLocation: string;
+  estimatedDistanceKm: number | null;
+  estimatedEtaMins: number | null;
+}
+
+export interface JobDescriptionRecommendation {
+  improvedTitle: string;
+  improvedDescription: string;
+  checklist: string[];
+  warnings: string[];
+  recommendedBudget: {
+    min: number;
+    recommended: number;
+    max: number;
+  };
+}
+
+export interface BidRecommendation {
+  score: number;
+  suggestedBidAmount: number | null;
+  suggestedMessage: string;
+  strategy: string;
+  riskFlags: string[];
+}
+
+export interface ChatRecommendation {
+  quickReplies: string[];
+  tone: 'professional' | 'friendly' | 'urgent';
+  safetyNote: string;
+}
+
 // ─── API Types ───────────────────────────────
 
 export interface AuthTokens {
@@ -257,6 +400,7 @@ export type AuthStackParamList = {
 
 export type CustomerTabParamList = {
   Dashboard: undefined;
+  Messages: undefined;
   Notifications: undefined;
   Profile: undefined;
 };
@@ -270,10 +414,14 @@ export type CustomerStackParamList = {
   Payment: { jobId: string };
   Rating: { jobId: string };
   Dispute: { jobId: string };
+  Chat: { jobId: string };
+  ProviderProfile: { userId: string };
+  ProviderLocation: { jobId: string };
 };
 
 export type ProviderTabParamList = {
   Dashboard: undefined;
+  Messages: undefined;
   Notifications: undefined;
   Profile: undefined;
 };
@@ -286,5 +434,10 @@ export type ProviderStackParamList = {
   Payment: { jobId: string };
   Rating: { jobId: string };
   Dispute: { jobId: string };
+  Chat: { jobId: string };
+  ProviderProfile: { userId: string };
+  SkillsManagement: undefined;
+  PortfolioManagement: undefined;
+  Availability: undefined;
 };
 

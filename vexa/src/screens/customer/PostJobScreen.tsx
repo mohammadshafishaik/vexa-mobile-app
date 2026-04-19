@@ -19,11 +19,12 @@ import {
   ChevronLeft,
   MapPin,
   Map,
-  DollarSign,
+  IndianRupee,
   Camera,
   Tag,
   FileText,
   Zap,
+  Sparkles,
 } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import Button from '../../components/ui/Button';
@@ -35,6 +36,7 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
 import api from '../../services/api';
 import { uploadService } from '../../services/upload';
+import { recommendationService } from '../../services/recommendations';
 
 const CATEGORIES = [
   'Plumbing',
@@ -81,6 +83,8 @@ const PostJobScreen: React.FC = () => {
   const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [aiChecklist, setAiChecklist] = useState<string[]>([]);
   const selectedCategoryMinimum = getMinimumBudgetForCategory(category);
 
   const getCurrentPositionAsync = (options: any): Promise<any> =>
@@ -152,7 +156,11 @@ const PostJobScreen: React.FC = () => {
       return response.json();
     };
 
-    const providers = [
+    const providers: Array<{
+      url: string;
+      headers: Record<string, string>;
+      parser: (payload: any) => string | null;
+    }> = [
       {
         url: `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
         headers: {
@@ -187,7 +195,7 @@ const PostJobScreen: React.FC = () => {
   const requestLocationPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') {
       if (typeof Geolocation.requestAuthorization === 'function') {
-        Geolocation.requestAuthorization('whenInUse');
+        Geolocation.requestAuthorization();
       }
       return true;
     }
@@ -256,6 +264,53 @@ const PostJobScreen: React.FC = () => {
     if (result.assets) {
       const newUris = result.assets.map((a) => a.uri!).filter(Boolean);
       setImages((prev) => [...prev, ...newUris]);
+    }
+  };
+
+  const handleGenerateAiSuggestion = async () => {
+    if (!category) {
+      Alert.alert('Select Category', 'Please choose a category first for better AI recommendations.');
+      return;
+    }
+
+    if (!title.trim() && !description.trim()) {
+      Alert.alert('Add Basic Details', 'Enter at least a title or short description first.');
+      return;
+    }
+
+    setIsGeneratingAi(true);
+    try {
+      const recommendation = await recommendationService.suggestJobDescription({
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        location: location.trim(),
+        budget: Number(price) || undefined,
+        urgency,
+      });
+
+      if (recommendation.improvedTitle) {
+        setTitle(recommendation.improvedTitle);
+      }
+
+      if (recommendation.improvedDescription) {
+        setDescription(recommendation.improvedDescription);
+      }
+
+      if (!price.trim() || Number(price) < recommendation.recommendedBudget.min) {
+        setPrice(String(recommendation.recommendedBudget.recommended));
+      }
+
+      setAiChecklist(recommendation.checklist || []);
+
+      if (recommendation.warnings?.length) {
+        Alert.alert('AI Notes', recommendation.warnings.join('\n'));
+      }
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Unable to generate AI recommendation right now.';
+      Alert.alert('AI Assistant', message);
+    } finally {
+      setIsGeneratingAi(false);
     }
   };
 
@@ -360,7 +415,17 @@ const PostJobScreen: React.FC = () => {
 
           {/* Description */}
           <Animated.View entering={FadeInDown.delay(150).duration(400)}>
-            <Text style={styles.label}>DESCRIPTION</Text>
+            <View style={styles.aiAssistRow}>
+              <Text style={styles.label}>DESCRIPTION</Text>
+              <TouchableOpacity
+                onPress={handleGenerateAiSuggestion}
+                style={styles.aiAssistButton}
+                disabled={isGeneratingAi}
+              >
+                <Sparkles size={14} color={colors.white} />
+                <Text style={styles.aiAssistText}>{isGeneratingAi ? 'Thinking...' : 'AI Improve'}</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.textAreaWrapper}>
               <TextInput
                 style={styles.textArea}
@@ -373,6 +438,16 @@ const PostJobScreen: React.FC = () => {
                 textAlignVertical="top"
               />
             </View>
+            {aiChecklist.length > 0 && (
+              <GlassCard style={styles.aiChecklistCard}>
+                <Text style={styles.aiChecklistTitle}>AI Checklist</Text>
+                {aiChecklist.map((item, index) => (
+                  <Text key={`${item}-${index}`} style={styles.aiChecklistItem}>
+                    • {item}
+                  </Text>
+                ))}
+              </GlassCard>
+            )}
           </Animated.View>
 
           {/* Category */}
@@ -435,7 +510,7 @@ const PostJobScreen: React.FC = () => {
               value={price}
               onChangeText={setPrice}
               keyboardType="numeric"
-              icon={<DollarSign size={18} color={colors.gray500} />}
+              icon={<IndianRupee size={18} color={colors.gray500} />}
               hint={
                 category
                   ? `Minimum for ${category}: ₹${selectedCategoryMinimum}`
@@ -536,6 +611,44 @@ const styles = StyleSheet.create({
     borderColor: colors.gray700,
     borderRadius: borderRadius.md,
     marginBottom: spacing[4],
+  },
+  aiAssistRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  aiAssistButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    backgroundColor: colors.gray800,
+    borderColor: colors.gray700,
+    borderWidth: 1,
+    paddingVertical: spacing[1],
+    paddingHorizontal: spacing[2],
+    borderRadius: borderRadius.full,
+    marginBottom: spacing[2],
+  },
+  aiAssistText: {
+    ...typography.caption,
+    color: colors.white,
+    fontFamily: fontFamilies.semibold,
+  },
+  aiChecklistCard: {
+    marginTop: -spacing[2],
+    marginBottom: spacing[4],
+  },
+  aiChecklistTitle: {
+    ...typography.label,
+    color: colors.white,
+    marginBottom: spacing[2],
+    textTransform: 'uppercase',
+  },
+  aiChecklistItem: {
+    ...typography.bodySm,
+    color: colors.gray300,
+    marginBottom: spacing[1],
+    lineHeight: 18,
   },
   textArea: {
     fontFamily: fontFamilies.regular,

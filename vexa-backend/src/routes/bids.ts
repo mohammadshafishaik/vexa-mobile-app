@@ -34,6 +34,24 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    // Validate provider has matching skill for this job category
+    const providerSkills = await prisma.providerSkill.findMany({
+      where: { providerId: req.user!.userId },
+      select: { category: true },
+    });
+    if (providerSkills.length > 0) {
+      const hasMatchingSkill = providerSkills.some(
+        (s) => s.category.toLowerCase() === (job.category || '').toLowerCase()
+      );
+      if (!hasMatchingSkill) {
+        res.status(403).json({
+          success: false,
+          message: `You do not have the "${job.category}" skill registered. Add it in your profile to bid on this job.`,
+        });
+        return;
+      }
+    }
+
     // Check if provider already bid
     const existingBid = await prisma.bid.findUnique({
       where: { jobId_providerId: { jobId, providerId: req.user!.userId } },

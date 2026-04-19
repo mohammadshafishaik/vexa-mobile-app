@@ -1,0 +1,265 @@
+type JobRecommendationInput = {
+  title?: string;
+  description?: string;
+  category?: string;
+  location?: string;
+  budget?: number;
+  urgency?: string;
+};
+
+type BidRecommendationInput = {
+  jobTitle?: string;
+  jobDescription?: string;
+  jobCategory?: string;
+  currentLowestBid?: number;
+  myBidAmount?: number;
+  estimatedDuration?: string;
+  message?: string;
+  providerExperienceYears?: number;
+};
+
+type ChatRecommendationInput = {
+  latestMessage?: string;
+  jobTitle?: string;
+  draft?: string;
+  jobStatus?: string;
+};
+
+export type JobRecommendationOutput = {
+  improvedTitle: string;
+  improvedDescription: string;
+  checklist: string[];
+  warnings: string[];
+  recommendedBudget: {
+    min: number;
+    recommended: number;
+    max: number;
+  };
+};
+
+export type BidRecommendationOutput = {
+  score: number;
+  suggestedBidAmount: number | null;
+  suggestedMessage: string;
+  strategy: string;
+  riskFlags: string[];
+};
+
+export type ChatRecommendationOutput = {
+  quickReplies: string[];
+  tone: 'professional' | 'friendly' | 'urgent';
+  safetyNote: string;
+};
+
+const CATEGORY_BASELINE_BUDGET: Record<string, { min: number; recommended: number }> = {
+  plumbing: { min: 300, recommended: 650 },
+  electrical: { min: 300, recommended: 700 },
+  cleaning: { min: 250, recommended: 600 },
+  painting: { min: 400, recommended: 1200 },
+  carpentry: { min: 350, recommended: 900 },
+  'appliance repair': { min: 350, recommended: 900 },
+  'ac service': { min: 400, recommended: 1100 },
+  'pest control': { min: 450, recommended: 1400 },
+  other: { min: 250, recommended: 700 },
+};
+
+const normalizeCategory = (value?: string): string =>
+  String(value || 'other').trim().toLowerCase() || 'other';
+
+const normalizeText = (value?: string): string => String(value || '').trim();
+
+const toSentenceCase = (value: string): string =>
+  value.length ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+const roundCurrency = (value: number): number => Math.round(value / 10) * 10;
+
+const buildChecklistFromDescription = (description: string): string[] => {
+  const lower = description.toLowerCase();
+  const checklist = [
+    'Mention exact issue symptoms and when they started',
+    'Add access constraints (parking, gate pass, floor, lift)',
+    'Mention preferred service time slot',
+  ];
+
+  if (!/(photo|image|pic)/.test(lower)) {
+    checklist.push('Attach at least one clear photo for faster estimates');
+  }
+
+  if (!/(urgent|asap|today|immediately)/.test(lower)) {
+    checklist.push('Mention urgency clearly to get relevant provider response time');
+  }
+
+  return checklist.slice(0, 5);
+};
+
+export const recommendJobDescription = (
+  input: JobRecommendationInput,
+): JobRecommendationOutput => {
+  const title = normalizeText(input.title);
+  const description = normalizeText(input.description);
+  const category = normalizeCategory(input.category);
+  const location = normalizeText(input.location);
+  const budget = Number.isFinite(input.budget) ? Number(input.budget) : undefined;
+
+  const budgetConfig = CATEGORY_BASELINE_BUDGET[category] || CATEGORY_BASELINE_BUDGET.other;
+  const recommended = roundCurrency(Math.max(budgetConfig.recommended, budget || 0));
+  const min = budgetConfig.min;
+  const max = roundCurrency(recommended * 1.8);
+
+  const improvedTitle =
+    title || `${toSentenceCase(category)} service required${location ? ` in ${location}` : ''}`;
+
+  const baseDescription = description || 'Need a verified professional for this service request.';
+  const improvedDescription = [
+    baseDescription,
+    '',
+    'AI summary:',
+    `- Category: ${toSentenceCase(category)}`,
+    location ? `- Location: ${location}` : '- Location: To be confirmed',
+    `- Budget expectation: Around Rs ${recommended} (minimum Rs ${min})`,
+    `- Priority: ${String(input.urgency || 'NORMAL').toUpperCase()}`,
+    '- Please confirm visit ETA, tools/spares needed, and final scope before starting.',
+  ].join('\n');
+
+  const warnings: string[] = [];
+  if (typeof budget === 'number' && budget < min) {
+    warnings.push(`Entered budget is below recommended minimum for ${category} (Rs ${min}).`);
+  }
+  if (description.length < 30) {
+    warnings.push('Description is short. Add issue details to reduce wrong bids and revisions.');
+  }
+
+  return {
+    improvedTitle,
+    improvedDescription,
+    checklist: buildChecklistFromDescription(baseDescription),
+    warnings,
+    recommendedBudget: {
+      min,
+      recommended,
+      max,
+    },
+  };
+};
+
+export const recommendBid = (input: BidRecommendationInput): BidRecommendationOutput => {
+  const category = normalizeCategory(input.jobCategory);
+  const baseline = CATEGORY_BASELINE_BUDGET[category] || CATEGORY_BASELINE_BUDGET.other;
+  const lowest = Number.isFinite(input.currentLowestBid)
+    ? Number(input.currentLowestBid)
+    : undefined;
+  const myBid = Number.isFinite(input.myBidAmount)
+    ? Number(input.myBidAmount)
+    : undefined;
+
+  let suggestedBidAmount: number | null = null;
+  if (typeof lowest === 'number') {
+    suggestedBidAmount = roundCurrency(Math.max(baseline.min, lowest - Math.max(30, lowest * 0.03)));
+  } else if (typeof myBid === 'number') {
+    suggestedBidAmount = roundCurrency(Math.max(baseline.min, myBid));
+  } else {
+    suggestedBidAmount = roundCurrency(Math.max(baseline.min, baseline.recommended));
+  }
+
+  const riskFlags: string[] = [];
+  let score = 82;
+
+  if (typeof myBid === 'number' && myBid < baseline.min) {
+    score -= 20;
+    riskFlags.push('Bid is too low for category baseline and may look unrealistic.');
+  }
+
+  if (typeof lowest === 'number' && typeof myBid === 'number' && myBid > lowest * 1.15) {
+    score -= 16;
+    riskFlags.push('Bid is significantly higher than current competition.');
+  }
+
+  const message = normalizeText(input.message);
+  if (message.length < 25) {
+    score -= 12;
+    riskFlags.push('Proposal message is too short and may reduce conversion.');
+  }
+
+  const estimatedDuration = normalizeText(input.estimatedDuration);
+  if (!estimatedDuration) {
+    score -= 8;
+    riskFlags.push('Estimated duration is missing.');
+  }
+
+  const experience = Number(input.providerExperienceYears || 0);
+  if (experience >= 3) {
+    score += 6;
+  }
+
+  score = clamp(score, 30, 98);
+
+  const suggestedMessage = [
+    `Hello, I can take up \"${normalizeText(input.jobTitle) || 'this job'}\".`,
+    `I have ${Math.max(1, experience || 1)}+ years experience in ${toSentenceCase(category)} work.`,
+    `Estimated completion: ${estimatedDuration || 'as per site inspection and scope'}.`,
+    'I will confirm final scope on arrival and keep material/labor transparent.',
+  ].join(' ');
+
+  const strategy =
+    score >= 80
+      ? 'Strong bid. Keep communication fast and professional to improve acceptance chance.'
+      : 'Improve pricing clarity and proposal detail before submitting this bid.';
+
+  return {
+    score,
+    suggestedBidAmount,
+    suggestedMessage,
+    strategy,
+    riskFlags,
+  };
+};
+
+export const recommendChatReplies = (
+  input: ChatRecommendationInput,
+): ChatRecommendationOutput => {
+  const latest = normalizeText(input.latestMessage).toLowerCase();
+  const draft = normalizeText(input.draft);
+
+  let tone: 'professional' | 'friendly' | 'urgent' = 'professional';
+  if (/(urgent|asap|now|immediately)/.test(latest)) {
+    tone = 'urgent';
+  } else if (/(thanks|thank you|great|awesome)/.test(latest)) {
+    tone = 'friendly';
+  }
+
+  const quickReplies: string[] = [];
+
+  if (/(where|location|reach|arrive|eta|when)/.test(latest)) {
+    quickReplies.push('I am on the way and will share ETA shortly.');
+    quickReplies.push('I should reach in around 20-30 minutes depending on traffic.');
+  }
+
+  if (/(price|cost|charge|amount|budget)/.test(latest)) {
+    quickReplies.push('I will confirm final cost after a quick inspection to avoid surprises.');
+    quickReplies.push('Current estimate is within the agreed budget range.');
+  }
+
+  if (/(photo|image|picture)/.test(latest)) {
+    quickReplies.push('Please share a clear photo so I can confirm tools and parts needed.');
+  }
+
+  if (!quickReplies.length) {
+    quickReplies.push('Got it. I will proceed and keep you updated step by step.');
+    quickReplies.push('Thanks for the update. I am coordinating this now.');
+    quickReplies.push('Understood. I will confirm once completed.');
+  }
+
+  if (draft.length > 0 && draft.length < 20) {
+    quickReplies.unshift(`${draft} - I will share the next update shortly.`);
+  }
+
+  return {
+    quickReplies: quickReplies.slice(0, 3),
+    tone,
+    safetyNote:
+      'Do not share OTPs, UPI PIN, or personal banking details in chat. Keep all communication in-app.',
+  };
+};

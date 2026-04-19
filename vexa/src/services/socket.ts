@@ -103,4 +103,48 @@ export const socketService = {
       socket?.removeAllListeners();
     }
   },
+
+  // ─── Chat events ─────────────────────────────
+  joinChatRoom: (jobId: string): void => {
+    socket?.emit('chat:join', jobId);
+  },
+
+  leaveChatRoom: (jobId: string): void => {
+    socket?.emit('chat:leave', jobId);
+  },
+
+  onChatMessage: (callback: (message: unknown) => void): void => {
+    socket?.on('chat:message', callback);
+  },
+
+  onChatNewMessage: (callback: (data: { jobId: string; message: unknown }) => void): void => {
+    socket?.on('chat:newMessage', callback);
+  },
+
+  onChatTyping: (callback: (data: { jobId: string; userId: string; isTyping: boolean }) => void): void => {
+    socket?.on('chat:typing', callback);
+  },
+
+  sendTypingIndicator: (jobId: string, userId: string, isTyping: boolean): void => {
+    socket?.emit('chat:typing', { jobId, userId, isTyping });
+  },
+
+  onChatRead: (callback: (data: { jobId: string; readBy: string }) => void): void => {
+    socket?.on('chat:read', callback);
+  },
+
+  // ─── Location events ────────────────────────
+  onProviderLocation: (callback: (data: {
+    jobId: string;
+    providerId: string;
+    latitude: number;
+    longitude: number;
+    updatedAt: string;
+  }) => void): void => {
+    socket?.on('location:provider', callback);
+  },
+
+  sendLocationUpdate: (data: { jobId: string; latitude: number; longitude: number }): void => {
+    socket?.emit('location:update', data);
+  },
 };

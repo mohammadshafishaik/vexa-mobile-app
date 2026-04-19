@@ -17,7 +17,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import {
   ChevronLeft,
   Camera,
-  DollarSign,
+  IndianRupee,
   AlertTriangle,
   X,
 } from 'lucide-react-native';
@@ -205,7 +205,7 @@ const ModificationRequestScreen: React.FC = () => {
               value={revisedPrice}
               onChangeText={setRevisedPrice}
               keyboardType="numeric"
-              icon={<DollarSign size={18} color={colors.gray500} />}
+              icon={<IndianRupee size={18} color={colors.gray500} />}
               error={
                 revisedPrice.length > 0 && !isPriceValid
                   ? `Must be greater than current and within ${JOB_LIMITS.MAX_PRICE_INCREASE_PERCENT}% increase`

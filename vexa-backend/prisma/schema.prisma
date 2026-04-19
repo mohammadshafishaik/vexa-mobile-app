@@ -61,6 +61,24 @@ enum DisputeDecision {
   REJECT
 }
 
+enum CancellationInitiator {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum ProviderAvailabilityStatus {
+  ONLINE
+  OFFLINE
+  BUSY
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  SYSTEM
+}
+
 enum JobStatus {
   POSTED
   BIDDING
@@ -109,6 +127,9 @@ enum NotificationType {
   DISPUTE_RESOLVED
   RATING_RECEIVED
   SYSTEM
+  CANCELLATION
+  NEW_MESSAGE
+  LOCATION_UPDATE
 }
 
 // ─── Models ───────────────────────────────────
@@ -138,6 +159,13 @@ model User {
   
   // Push Notifications
   deviceTokens String[] @default([])
+
+  // Provider Profile Extensions
+  bio                   String?
+  availabilityStatus    ProviderAvailabilityStatus @default(OFFLINE)
+  lastLocationLat       Float?
+  lastLocationLng       Float?
+  lastLocationUpdatedAt DateTime?
   
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -165,6 +193,14 @@ model User {
   notificationCampaigns NotificationCampaign[] @relation("NotificationCampaignActor")
   adminSessions       AdminSession[]
   passwordResetTokens PasswordResetToken[]
+
+  // New feature relations
+  sentMessages        ChatMessage[]        @relation("MessageSender")
+  receivedMessages    ChatMessage[]        @relation("MessageReceiver")
+  skills              ProviderSkill[]      @relation("ProviderSkills")
+  cancellations       Cancellation[]       @relation("CancellationActor")
+  portfolioItems      PortfolioItem[]      @relation("ProviderPortfolio")
+  availabilitySlots   ProviderAvailability[] @relation("ProviderAvailability")
 
   emailVerified Boolean   @default(false)
   image         String?
@@ -210,6 +246,16 @@ model ServiceRequest {
   selectedProvider   User?     @relation("SelectedProvider", fields: [selectedProviderId], references: [id])
   maxModifications   Int       @default(2)
   modificationCount  Int       @default(0)
+
+  // Live location tracking
+  providerLat               Float?
+  providerLng               Float?
+  providerLocationUpdatedAt DateTime?
+
+  // Cancellation metadata
+  cancellationReason  String?
+  cancellationFee     Float     @default(0)
+
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -221,6 +267,8 @@ model ServiceRequest {
   disputes      Dispute[]
   bidAnomalies  BidAnomaly[]
   disputeResolutions DisputeResolution[]
+  chatMessages  ChatMessage[]
+  cancellations Cancellation[]
 
   @@map("service_requests")
 }
@@ -278,6 +326,14 @@ model Payment {
   razorpayPaymentId String?
   razorpaySignature String?
   securityHash      String?
+
+  // Commission & Tax
+  platformCommission Float       @default(0)
+  commissionRate     Float       @default(0)    // e.g. 0.10 for 10%
+  gstAmount          Float       @default(0)
+  gstRate            Float       @default(0.18) // 18% GST on commission
+  providerPayout     Float       @default(0)    // amount - platformCommission
+
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   actionLogs        PaymentActionLog[]
@@ -524,4 +580,85 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+// ─── New Feature Models ───────────────────────
+
+model ChatMessage {
+  id          String         @id @default(uuid())
+  jobId       String
+  job         ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User           @relation("MessageSender", fields: [senderId], references: [id])
+  receiverId  String
+  receiver    User           @relation("MessageReceiver", fields: [receiverId], references: [id])
+  content     String
+  messageType MessageType    @default(TEXT)
+  imageUrl    String?
+  isRead      Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+
+  @@index([jobId, createdAt])
+  @@index([senderId, receiverId])
+  @@map("chat_messages")
+}
+
+model ProviderSkill {
+  id              String   @id @default(uuid())
+  providerId      String
+  provider        User     @relation("ProviderSkills", fields: [providerId], references: [id], onDelete: Cascade)
+  category        String                          // e.g. "plumbing", "electrical"
+  experienceYears Int      @default(0)
+  isVerified      Boolean  @default(false)        // Admin-verified
+  createdAt       DateTime @default(now())
+
+  @@unique([providerId, category])
+  @@index([category])
+  @@map("provider_skills")
+}
+
+model Cancellation {
+  id              String                @id @default(uuid())
+  jobId           String
+  job             ServiceRequest        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  cancelledById   String
+  cancelledBy     User                  @relation("CancellationActor", fields: [cancelledById], references: [id])
+  initiator       CancellationInitiator
+  reason          String
+  cancellationFee Float                 @default(0)
+  feePaid         Boolean               @default(false)
+  ratingPenalty   Boolean               @default(false)
+  createdAt       DateTime              @default(now())
+
+  @@index([jobId])
+  @@map("cancellations")
+}
+
+model PortfolioItem {
+  id          String   @id @default(uuid())
+  providerId  String
+  provider    User     @relation("ProviderPortfolio", fields: [providerId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  imageUrl    String
+  category    String?
+  createdAt   DateTime @default(now())
+
+  @@index([providerId])
+  @@map("portfolio_items")
+}
+
+model ProviderAvailability {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   User     @relation("ProviderAvailability", fields: [providerId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int                             // 0=Sunday, 6=Saturday
+  startTime  String                          // "09:00"
+  endTime    String                          // "18:00"
+  isBlocked  Boolean  @default(false)        // Full-day block
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([providerId, dayOfWeek])
+  @@map("provider_availability")
 }

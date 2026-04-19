@@ -199,6 +199,8 @@ router.get('/profile/:userId', authMiddleware, async (req: Request, res: Respons
         avatarUrl: true,
         phone: true,
         role: true,
+        bio: true,
+        availabilityStatus: true,
         isVerified: true,
         kycStatus: true,
         createdAt: true,
@@ -224,6 +226,34 @@ router.get('/profile/:userId', authMiddleware, async (req: Request, res: Respons
           where: { status: 'PAID' },
           select: { id: true },
         },
+        // Include skills
+        skills: {
+          select: {
+            id: true,
+            category: true,
+            experienceYears: true,
+            isVerified: true,
+          },
+          orderBy: { category: 'asc' },
+        },
+        // Include portfolio
+        portfolioItems: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            imageUrl: true,
+            category: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        // Include payments received for total earnings
+        paymentsReceived: {
+          where: { status: 'COMPLETED' },
+          select: { providerPayout: true },
+        },
       },
     });
 
@@ -238,11 +268,31 @@ router.get('/profile/:userId', authMiddleware, async (req: Request, res: Respons
         ? user.ratingsReceived.reduce((sum, r) => sum + r.score, 0) / user.ratingsReceived.length
         : 0;
 
+    // Calculate total earnings
+    const totalEarnings = user.paymentsReceived.reduce(
+      (sum, p) => sum + (p.providerPayout || 0), 0
+    );
+
     const profile = {
-      ...user,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+      phone: user.phone,
+      role: user.role,
+      bio: user.bio,
+      availabilityStatus: user.availabilityStatus,
+      isVerified: user.isVerified,
+      kycStatus: user.kycStatus,
+      createdAt: user.createdAt,
+      ratingsReceived: user.ratingsReceived,
+      skills: user.skills,
+      portfolioItems: user.portfolioItems,
       completedJobsCount: user.selectedForJobs.length,
-      averageRating: avgRating,
+      averageRating: Math.round(avgRating * 10) / 10,
       totalRatings: user.ratingsReceived.length,
+      totalEarnings: Math.round(totalEarnings * 100) / 100,
+      portfolioCount: user.portfolioItems.length,
     };
 
     res.json({ success: true, data: profile });
@@ -256,12 +306,13 @@ router.get('/profile/:userId', authMiddleware, async (req: Request, res: Respons
 // Update own profile
 router.patch('/profile', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { name, phone, avatarUrl } = req.body;
+    const { name, phone, avatarUrl, bio } = req.body;
 
     const updateData: any = {};
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
     if (avatarUrl) updateData.avatarUrl = avatarUrl;
+    if (bio !== undefined) updateData.bio = bio;
 
     const user = await prisma.user.update({
       where: { id: req.user!.userId },

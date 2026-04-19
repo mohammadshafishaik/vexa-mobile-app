@@ -8,6 +8,20 @@ import { getIO } from '../lib/socket';
 
 const router = Router();
 
+// Commission & Tax configuration
+const getCommissionConfig = () => ({
+  commissionRate: Number(process.env.PLATFORM_COMMISSION_RATE) || 0.10,
+  gstRate: Number(process.env.GST_RATE) || 0.18,
+});
+
+const calculateCommission = (amount: number) => {
+  const { commissionRate, gstRate } = getCommissionConfig();
+  const platformCommission = Math.round(amount * commissionRate * 100) / 100;
+  const gstAmount = Math.round(platformCommission * gstRate * 100) / 100;
+  const providerPayout = Math.round((amount - platformCommission - gstAmount) * 100) / 100;
+  return { platformCommission, commissionRate, gstAmount, gstRate, providerPayout };
+};
+
 // ─── POST /api/payments/create-order ──────────────────────
 // Creates a REAL Razorpay order and returns the order ID + key to the frontend
 router.post('/create-order', authMiddleware, async (req: Request, res: Response) => {
@@ -71,6 +85,8 @@ router.post('/create-order', authMiddleware, async (req: Request, res: Response)
       .update(`${jobId}-${amount}-${Date.now()}-${order.id}`)
       .digest('hex');
 
+    const commissionBreakdown = calculateCommission(amount);
+
     const paymentData = {
       jobId,
       payerId: req.user!.userId,
@@ -81,6 +97,11 @@ router.post('/create-order', authMiddleware, async (req: Request, res: Response)
       securityHash,
       status: 'PENDING' as const,
       paymentMethod: 'RAZORPAY',
+      platformCommission: commissionBreakdown.platformCommission,
+      commissionRate: commissionBreakdown.commissionRate,
+      gstAmount: commissionBreakdown.gstAmount,
+      gstRate: commissionBreakdown.gstRate,
+      providerPayout: commissionBreakdown.providerPayout,
     };
 
     console.log('[Payments] Creating payment with data:', paymentData);
@@ -311,6 +332,7 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
     }
 
     const amount = job.revisedPrice || job.originalPrice;
+    const commissionBreakdown = calculateCommission(amount);
     const securityHash = crypto.createHash('sha256')
       .update(`${jobId}-${req.user!.userId}-${job.selectedProviderId}-${amount}-${Date.now()}-cash`)
       .digest('hex');
@@ -326,6 +348,11 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
         paymentMethod: 'CASH',
         securityHash,
         status: 'PENDING',
+        platformCommission: commissionBreakdown.platformCommission,
+        commissionRate: commissionBreakdown.commissionRate,
+        gstAmount: commissionBreakdown.gstAmount,
+        gstRate: commissionBreakdown.gstRate,
+        providerPayout: commissionBreakdown.providerPayout,
       },
     });
 

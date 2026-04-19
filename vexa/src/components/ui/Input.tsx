@@ -7,12 +7,6 @@ import {
   ViewStyle,
   TextInputProps,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  interpolateColor,
-} from 'react-native-reanimated';
 import { colors } from '../../theme/colors';
 import { typography, fontFamilies } from '../../theme/typography';
 import { borderRadius, spacing } from '../../theme/spacing';
@@ -36,33 +30,27 @@ const Input: React.FC<InputProps> = ({
   ...textInputProps
 }) => {
   const [isFocused, setIsFocused] = useState(false);
-  const focusAnim = useSharedValue(0);
-
-  const animatedBorderStyle = useAnimatedStyle(() => {
-    const borderColor = interpolateColor(
-      focusAnim.value,
-      [0, 1],
-      [error ? colors.error : colors.gray700, error ? colors.error : colors.white],
-    );
-    return { borderColor };
-  });
 
   const handleFocus = (e: any) => {
     setIsFocused(true);
-    focusAnim.value = withTiming(1, { duration: 200 });
     textInputProps.onFocus?.(e);
   };
 
   const handleBlur = (e: any) => {
     setIsFocused(false);
-    focusAnim.value = withTiming(0, { duration: 200 });
     textInputProps.onBlur?.(e);
   };
+
+  const resolvedBorderColor = error
+    ? colors.error
+    : isFocused
+    ? colors.white
+    : colors.gray700;
 
   return (
     <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <Animated.View style={[styles.inputWrapper, animatedBorderStyle]}>
+      <View style={[styles.inputWrapper, { borderColor: resolvedBorderColor }]}>
         {icon && <View style={styles.iconLeft}>{icon}</View>}
         <TextInput
           {...textInputProps}
@@ -75,9 +63,10 @@ const Input: React.FC<InputProps> = ({
           onFocus={handleFocus}
           onBlur={handleBlur}
           selectionColor={colors.white}
+          underlineColorAndroid="transparent"
         />
         {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
-      </Animated.View>
+      </View>
       {error && <Text style={styles.error}>{error}</Text>}
       {hint && !error && <Text style={styles.hint}>{hint}</Text>}
     </View>

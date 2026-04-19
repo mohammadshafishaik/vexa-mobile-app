@@ -50,11 +50,17 @@ const createUniqueOrderId = async (): Promise<string> => {
   return fallback;
 };
 
-// GET /api/jobs — list jobs (role-aware)
+// GET /api/jobs — list jobs (role-aware, with filters)
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { role, userId } = req.user!;
-    const { status, category, page = '1', limit = '20' } = req.query;
+    const {
+      status, category,
+      page = '1', limit = '20',
+      lat, lng, radiusKm,
+      minPrice, maxPrice,
+      sortBy,
+    } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const where: any = {};
@@ -62,15 +68,55 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     if (role === 'CUSTOMER') {
       where.customerId = userId;
     } else if (role === 'PROVIDER') {
-      // Providers see POSTED/BIDDING jobs or jobs assigned to them
-      where.OR = [
-        { status: { in: ['POSTED', 'BIDDING'] } },
-        { selectedProviderId: userId },
-      ];
+      // Get provider's registered skills
+      const providerSkills = await prisma.providerSkill.findMany({
+        where: { providerId: userId },
+        select: { category: true },
+      });
+      const skillCategories = providerSkills.map((s) => s.category);
+
+      // Providers see POSTED/BIDDING jobs matching their skills, or jobs assigned to them
+      if (skillCategories.length > 0) {
+        where.OR = [
+          {
+            status: { in: ['POSTED', 'BIDDING'] },
+            category: { in: skillCategories, mode: 'insensitive' },
+          },
+          { selectedProviderId: userId },
+        ];
+      } else {
+        // No skills registered — show all open jobs (backward compatible)
+        where.OR = [
+          { status: { in: ['POSTED', 'BIDDING'] } },
+          { selectedProviderId: userId },
+        ];
+      }
+
+      // Check provider availability — only show if provider is ONLINE
+      const provider = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { availabilityStatus: true },
+      });
+      // If provider is OFFLINE, only show their assigned jobs
+      if (provider?.availabilityStatus === 'OFFLINE') {
+        where.OR = [{ selectedProviderId: userId }];
+      }
     }
 
     if (status) where.status = status;
-    if (category) where.category = category;
+    if (category) where.category = { equals: String(category), mode: 'insensitive' };
+
+    // Price range filters
+    if (minPrice || maxPrice) {
+      where.originalPrice = {};
+      if (minPrice) where.originalPrice.gte = Number(minPrice);
+      if (maxPrice) where.originalPrice.lte = Number(maxPrice);
+    }
+
+    // Determine sort order
+    let orderBy: any = { createdAt: 'desc' };
+    if (sortBy === 'price_asc') orderBy = { originalPrice: 'asc' };
+    else if (sortBy === 'price_desc') orderBy = { originalPrice: 'desc' };
 
     const [jobs, total] = await Promise.all([
       prisma.serviceRequest.findMany({
@@ -81,20 +127,54 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
           bids: { include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } } } },
           modifications: true,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip,
         take: Number(limit),
       }),
       prisma.serviceRequest.count({ where }),
     ]);
 
+    // Apply distance filtering if coordinates provided
+    type JobWithComputedDistance = (typeof jobs)[number] & { distanceKm?: number | null };
+    let filteredJobs: JobWithComputedDistance[] = jobs;
+    if (lat && lng) {
+      const userLat = Number(lat);
+      const userLng = Number(lng);
+      const maxRadius = Number(radiusKm) || 10;
+
+      filteredJobs = jobs
+        .map((job): JobWithComputedDistance => {
+          if (job.latitude && job.longitude) {
+            const R = 6371; // Earth radius in km
+            const dLat = (job.latitude - userLat) * (Math.PI / 180);
+            const dLon = (job.longitude - userLng) * (Math.PI / 180);
+            const a =
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(userLat * (Math.PI / 180)) *
+                Math.cos(job.latitude * (Math.PI / 180)) *
+                Math.sin(dLon / 2) *
+                Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distance = Math.round(R * c * 10) / 10;
+            return { ...job, distanceKm: distance };
+          }
+          return { ...job, distanceKm: null };
+        })
+        .filter((job) => job.distanceKm == null || job.distanceKm <= maxRadius);
+
+      // Sort by distance if requested
+      if (sortBy === 'distance') {
+        filteredJobs.sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
+      }
+    }
+
     res.json({
       success: true,
-      data: jobs,
-      total,
+      data: filteredJobs,
+      total: lat && lng ? filteredJobs.length : total,
       page: Number(page),
       limit: Number(limit),
-      hasMore: skip + jobs.length < total,
+      hasMore: lat && lng ? false : skip + jobs.length < total,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

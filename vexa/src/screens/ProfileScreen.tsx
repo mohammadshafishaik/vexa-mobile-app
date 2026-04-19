@@ -14,6 +14,8 @@ import {
   LogOut,
   User as UserIcon,
   Shield,
+  Briefcase,
+  Clock,
   Bell,
   HelpCircle,
   FileText,
@@ -169,7 +171,7 @@ const ProfileScreen: React.FC = () => {
     );
   };
 
-  const menuItems = [
+  const baseMenuItems = [
     {
       icon: <UserIcon size={20} color={colors.gray400} />,
       label: 'Edit Profile',
@@ -180,6 +182,29 @@ const ProfileScreen: React.FC = () => {
       label: 'Change Password',
       onPress: () => navigation.navigate('ChangePassword'),
     },
+  ];
+
+  const providerMenuItems = user?.role === 'PROVIDER'
+    ? [
+      {
+        icon: <Briefcase size={20} color={colors.gray400} />,
+        label: 'Manage Skills',
+        onPress: () => navigation.navigate('SkillsManagement'),
+      },
+      {
+        icon: <FileText size={20} color={colors.gray400} />,
+        label: 'Manage Portfolio',
+        onPress: () => navigation.navigate('PortfolioManagement'),
+      },
+      {
+        icon: <Clock size={20} color={colors.gray400} />,
+        label: 'Set Availability',
+        onPress: () => navigation.navigate('Availability'),
+      },
+    ]
+    : [];
+
+  const utilityMenuItems = [
     {
       icon: <Bell size={20} color={colors.gray400} />,
       label: 'Notification Settings',
@@ -209,6 +234,8 @@ const ProfileScreen: React.FC = () => {
       },
     },
   ];
+
+  const menuItems = [...baseMenuItems, ...providerMenuItems, ...utilityMenuItems];
 
   return (
     <ScreenContainer>

@@ -21,7 +21,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, Users, Clock, TrendingUp } from 'lucide-react-native';
+import { ChevronLeft, Users, Clock, TrendingUp, Sparkles } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
 import Button from '../../components/ui/Button';
@@ -33,7 +33,7 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import Input from '../../components/ui/Input';
-import { Bid, CustomerStackParamList, UserRole } from '../../types';
+import { Bid, BidRecommendation, CustomerStackParamList, UserRole } from '../../types';
 import { formatCurrency } from '../../utils/helpers';
 import { bidService } from '../../services/bids';
 import { socketService } from '../../services/socket';
@@ -41,6 +41,7 @@ import { SOCKET_EVENTS } from '../../utils/constants';
 import api from '../../services/api';
 import { resolveImageUrl } from '../../utils/image';
 import { isKycVerifiedStatus } from '../../utils/kyc';
+import { recommendationService } from '../../services/recommendations';
 
 type LiveBiddingRoute = RouteProp<CustomerStackParamList, 'LiveBidding'>;
 
@@ -70,6 +71,8 @@ const LiveBiddingScreen: React.FC = () => {
   const [bidDuration, setBidDuration] = useState('');
   const [bidMessage, setBidMessage] = useState('');
   const [isSubmittingBid, setIsSubmittingBid] = useState(false);
+  const [isGeneratingBidAi, setIsGeneratingBidAi] = useState(false);
+  const [bidRecommendation, setBidRecommendation] = useState<BidRecommendation | null>(null);
 
   // Live pulse animation for the "LIVE" indicator
   const pulseOpacity = useSharedValue(1);
@@ -157,7 +160,51 @@ const LiveBiddingScreen: React.FC = () => {
       setBidMessage('');
     }
 
+    setBidRecommendation(null);
     setIsBidModalVisible(true);
+  };
+
+  const handleGenerateBidRecommendation = async () => {
+    if (!activeJob) return;
+
+    const competitorBids = bids
+      .filter((bid) => bid.providerId !== user?.id)
+      .map((bid) => bid.amount)
+      .filter((amount) => Number.isFinite(amount));
+    const currentLowestBid = competitorBids.length > 0
+      ? Math.min(...competitorBids)
+      : undefined;
+
+    setIsGeneratingBidAi(true);
+    try {
+      const recommendation = await recommendationService.suggestBid({
+        jobTitle: activeJob.title,
+        jobDescription: activeJob.description,
+        jobCategory: activeJob.category,
+        currentLowestBid,
+        myBidAmount: Number(bidAmount) || undefined,
+        estimatedDuration: bidDuration,
+        message: bidMessage,
+      });
+
+      setBidRecommendation(recommendation);
+
+      if (
+        recommendation.suggestedBidAmount &&
+        (!bidAmount.trim() || Number(bidAmount) > recommendation.suggestedBidAmount)
+      ) {
+        setBidAmount(String(recommendation.suggestedBidAmount));
+      }
+
+      if (!bidMessage.trim() || bidMessage.trim().length < 20) {
+        setBidMessage(recommendation.suggestedMessage);
+      }
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Unable to generate bid recommendation right now.';
+      Alert.alert('AI Bid Assistant', message);
+    } finally {
+      setIsGeneratingBidAi(false);
+    }
   };
 
   const handleAcceptBid = async (bid: Bid) => {
@@ -393,6 +440,32 @@ const LiveBiddingScreen: React.FC = () => {
                 Current bid: {formatCurrency(providerExistingBid.amount)}
               </Text>
             )}
+
+            <TouchableOpacity
+              style={styles.aiBidButton}
+              onPress={handleGenerateBidRecommendation}
+              disabled={isGeneratingBidAi}
+            >
+              <Sparkles size={14} color={colors.white} />
+              <Text style={styles.aiBidButtonText}>
+                {isGeneratingBidAi ? 'Thinking...' : 'AI Recommend'}
+              </Text>
+            </TouchableOpacity>
+
+            {bidRecommendation && (
+              <GlassCard style={styles.aiBidCard}>
+                <Text style={styles.aiBidTitle}>AI Bid Score: {bidRecommendation.score}/100</Text>
+                <Text style={styles.aiBidBody}>{bidRecommendation.strategy}</Text>
+                {bidRecommendation.suggestedBidAmount ? (
+                  <Text style={styles.aiBidBody}>
+                    Suggested amount: {formatCurrency(bidRecommendation.suggestedBidAmount)}
+                  </Text>
+                ) : null}
+                {bidRecommendation.riskFlags?.slice(0, 2).map((flag, index) => (
+                  <Text key={`${flag}-${index}`} style={styles.aiBidRisk}>• {flag}</Text>
+                ))}
+              </GlassCard>
+            )}
             
             <Input
               label="Bid Amount (₹)"
@@ -602,6 +675,41 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.gray400,
     marginBottom: spacing[3],
+  },
+  aiBidButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[1],
+    borderWidth: 1,
+    borderColor: colors.gray700,
+    backgroundColor: colors.gray800,
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing[2],
+    marginBottom: spacing[3],
+  },
+  aiBidButtonText: {
+    ...typography.caption,
+    color: colors.white,
+    fontFamily: fontFamilies.semibold,
+  },
+  aiBidCard: {
+    marginBottom: spacing[3],
+  },
+  aiBidTitle: {
+    fontFamily: fontFamilies.semibold,
+    color: colors.white,
+    marginBottom: spacing[1],
+  },
+  aiBidBody: {
+    ...typography.bodySm,
+    color: colors.gray300,
+    marginBottom: spacing[1],
+  },
+  aiBidRisk: {
+    ...typography.caption,
+    color: colors.warning,
+    marginBottom: spacing[1],
   },
   modalActions: {
     flexDirection: 'row',

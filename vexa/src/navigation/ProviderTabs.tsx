@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Home, Bell, User } from 'lucide-react-native';
+import { Home, Bell, User, MessageCircle } from 'lucide-react-native';
 import { ProviderTabParamList, ProviderStackParamList } from '../types';
 import { colors } from '../theme/colors';
 import { fontFamilies } from '../theme/typography';
@@ -11,11 +11,17 @@ import { useNotificationStore } from '../store/useNotificationStore';
 // Screens
 import ProviderDashboardScreen from '../screens/provider/DashboardScreen';
 import ModificationRequestScreen from '../screens/provider/ModificationRequestScreen';
+import SkillsManagementScreen from '../screens/provider/SkillsManagementScreen';
+import PortfolioManagementScreen from '../screens/provider/PortfolioManagementScreen';
+import AvailabilityScreen from '../screens/provider/AvailabilityScreen';
 import JobDetailScreen from '../screens/customer/JobDetailScreen';
 import LiveBiddingScreen from '../screens/customer/LiveBiddingScreen';
 import PaymentScreen from '../screens/customer/PaymentScreen';
 import RatingScreen from '../screens/customer/RatingScreen';
 import DisputeScreen from '../screens/customer/DisputeScreen';
+import ChatScreen from '../screens/ChatScreen';
+import ProviderProfileScreen from '../screens/ProviderProfileScreen';
+import MessagesScreen from '../screens/MessagesScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
@@ -23,6 +29,7 @@ import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 
 const Tab = createBottomTabNavigator<ProviderTabParamList>();
 const DashStack = createNativeStackNavigator<ProviderStackParamList>();
+const MessagesStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 
 // Dashboard tab wraps the dashboard in a stack with sub-screens
@@ -45,7 +52,28 @@ const DashboardStackScreen: React.FC = () => {
       <DashStack.Screen name="Payment" component={PaymentScreen} />
       <DashStack.Screen name="Rating" component={RatingScreen} />
       <DashStack.Screen name="Dispute" component={DisputeScreen} />
+      <DashStack.Screen name="Chat" component={ChatScreen} />
+      <DashStack.Screen name="ProviderProfile" component={ProviderProfileScreen} />
+      <DashStack.Screen name="SkillsManagement" component={SkillsManagementScreen} />
+      <DashStack.Screen name="PortfolioManagement" component={PortfolioManagementScreen} />
+      <DashStack.Screen name="Availability" component={AvailabilityScreen} />
     </DashStack.Navigator>
+  );
+};
+
+// Messages tab with sub-screens
+const MessagesStackScreen: React.FC = () => {
+  return (
+    <MessagesStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: 'slide_from_right',
+        contentStyle: { backgroundColor: colors.black },
+      }}
+    >
+      <MessagesStack.Screen name="MessagesHome" component={MessagesScreen} />
+      <MessagesStack.Screen name="Chat" component={ChatScreen} />
+    </MessagesStack.Navigator>
   );
 };
 
@@ -85,6 +113,15 @@ const ProviderTabs: React.FC = () => {
         options={{
           tabBarIcon: ({ color, size }) => (
             <Home size={size} color={color} strokeWidth={1.5} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Messages"
+        component={MessagesStackScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <MessageCircle size={size} color={color} strokeWidth={1.5} />
           ),
         }}
       />
