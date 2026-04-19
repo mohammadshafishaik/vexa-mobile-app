@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VEXA App Download</title>
+  <meta name="description" content="Download the latest VEXA Android APK." />
+  <link rel="preconnect" href="https://api.github.com" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero card">
+      <img src="assets/icon.png" alt="VEXA app icon" class="logo" />
+      <p class="kicker">Official Distribution</p>
+      <h1>Download VEXA Android App</h1>
+      <p class="subtitle">
+        Always install the latest signed APK published on GitHub Releases.
+      </p>
+
+      <div class="cta-row">
+        <a id="downloadBtn" class="btn" href="#" aria-disabled="true">Loading latest APK...</a>
+        <a class="btn btn-secondary" href="https://github.com/mohammadshafishaik/vexa-mobile-app/releases" target="_blank" rel="noopener noreferrer">
+          View All Releases
+        </a>
+      </div>
+
+      <p id="statusLine" class="status">Fetching release metadata...</p>
+    </section>
+
+    <section class="grid">
+      <article class="card info">
+        <h2>Latest Release</h2>
+        <ul>
+          <li><span>Version</span><strong id="releaseTag">-</strong></li>
+          <li><span>Published</span><strong id="releaseDate">-</strong></li>
+          <li><span>APK Name</span><strong id="assetName">-</strong></li>
+          <li><span>APK Size</span><strong id="assetSize">-</strong></li>
+          <li><span>SHA-256</span><strong id="assetSha">See release notes</strong></li>
+        </ul>
+      </article>
+
+      <article class="card info">
+        <h2>Install Steps</h2>
+        <ol>
+          <li>Download the APK using the button above.</li>
+          <li>Open the APK from your Downloads folder.</li>
+          <li>If prompted, allow install from unknown apps for your browser/file manager.</li>
+          <li>Complete installation and open VEXA.</li>
+        </ol>
+      </article>
+    </section>
+
+    <section class="card notes">
+      <h2>Release Notes</h2>
+      <pre id="releaseNotes">Loading...</pre>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
