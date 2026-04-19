@@ -37,6 +37,7 @@ import { useJobStore } from '../../store/useJobStore';
 import api from '../../services/api';
 import { uploadService } from '../../services/upload';
 import { recommendationService } from '../../services/recommendations';
+import { sanitizeJobDescription } from '../../utils/helpers';
 
 const CATEGORIES = [
   'Plumbing',
@@ -294,7 +295,7 @@ const PostJobScreen: React.FC = () => {
       }
 
       if (recommendation.improvedDescription) {
-        setDescription(recommendation.improvedDescription);
+        setDescription(sanitizeJobDescription(recommendation.improvedDescription));
       }
 
       if (!price.trim() || Number(price) < recommendation.recommendedBudget.min) {
@@ -315,7 +316,8 @@ const PostJobScreen: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!title.trim() || !description.trim() || !category || !location.trim()) {
+    const cleanDescription = sanitizeJobDescription(description);
+    if (!title.trim() || !cleanDescription || !category || !location.trim()) {
       return;
     }
 
@@ -356,7 +358,7 @@ const PostJobScreen: React.FC = () => {
 
       const res = await api.post('/jobs', {
         title: title.trim(),
-        description: description.trim(),
+        description: cleanDescription,
         category,
         location: location.trim(),
         latitude: coords?.lat,
@@ -416,7 +418,10 @@ const PostJobScreen: React.FC = () => {
           {/* Description */}
           <Animated.View entering={FadeInDown.delay(150).duration(400)}>
             <View style={styles.aiAssistRow}>
-              <Text style={styles.label}>DESCRIPTION</Text>
+              <View>
+                <Text style={styles.label}>DESCRIPTION</Text>
+                <Text style={styles.aiAssistMeta}>Customer AI Assistant</Text>
+              </View>
               <TouchableOpacity
                 onPress={handleGenerateAiSuggestion}
                 style={styles.aiAssistButton}
@@ -633,6 +638,12 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.white,
     fontFamily: fontFamilies.semibold,
+  },
+  aiAssistMeta: {
+    ...typography.caption,
+    color: colors.gray500,
+    marginTop: -spacing[1],
+    marginBottom: spacing[1],
   },
   aiChecklistCard: {
     marginTop: -spacing[2],

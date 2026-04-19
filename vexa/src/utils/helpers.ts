@@ -103,6 +103,21 @@ export const truncateText = (text: string, maxLength: number): string => {
 };
 
 /**
+ * Remove legacy AI summary artifacts from stored descriptions.
+ */
+export const sanitizeJobDescription = (value: string): string => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const markerMatch = raw.match(/ai\s*summary\s*:/i);
+  const withoutSummary = markerMatch?.index != null
+    ? raw.slice(0, markerMatch.index)
+    : raw;
+
+  return withoutSummary.replace(/\s+/g, ' ').trim();
+};
+
+/**
  * Validate price increase is within allowed limit
  */
 export const isPriceIncreaseValid = (

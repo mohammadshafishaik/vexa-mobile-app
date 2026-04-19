@@ -6,6 +6,7 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '.
 import { authMiddleware } from '../middleware/auth';
 import { sendPasswordResetEmail, isEmailConfigured } from '../lib/email';
 import { getAccountAccessBlock, shouldAutoReactivateSuspendedAccount } from '../utils/accountStatus';
+import { AVAILABLE_SERVICE_CATEGORIES, normalizeServiceCategory } from '../utils/serviceCategories';
 import {
   validateRegistration,
   validateLogin,
@@ -25,6 +26,8 @@ const authUserSelect = {
   googleId: true,
   avatarUrl: true,
   phone: true,
+  bio: true,
+  availabilityStatus: true,
   role: true,
   accountStatus: true,
   suspendedUntil: true,
@@ -42,6 +45,8 @@ const toPublicUser = (user: any) => ({
   name: user.name,
   avatarUrl: user.avatarUrl,
   phone: user.phone,
+  bio: user.bio,
+  availabilityStatus: user.availabilityStatus,
   role: user.role,
   isVerified: user.isVerified,
   kycStatus: user.kycStatus,
@@ -190,7 +195,7 @@ const createUserCompat = async (data: {
 // ─── POST /api/auth/register ───────────────────────────
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, name, phone, role, password } = req.body;
+    const { email, name, phone, role, password, initialSkills } = req.body;
 
     // Validate all fields
     const validation = validateRegistration({ email, name, password, phone, role });
@@ -199,6 +204,24 @@ router.post('/register', async (req: Request, res: Response) => {
         success: false,
         message: validation.errors[0],
         errors: validation.errors,
+      });
+      return;
+    }
+
+    const normalizedProviderSkills = Array.isArray(initialSkills)
+      ? Array.from(
+          new Set(
+            initialSkills
+              .map((skill: unknown) => normalizeServiceCategory(String(skill || '')))
+              .filter((skill: string) => AVAILABLE_SERVICE_CATEGORIES.includes(skill as any)),
+          ),
+        )
+      : [];
+
+    if (role === 'PROVIDER' && normalizedProviderSkills.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: 'Please select at least one service category (for example: plumbing, electrical) to continue as a provider.',
       });
       return;
     }
@@ -224,6 +247,17 @@ router.post('/register', async (req: Request, res: Response) => {
       password: hashedPassword,
       isVerified: false,
     });
+
+    if (role === 'PROVIDER' && normalizedProviderSkills.length > 0) {
+      await prisma.providerSkill.createMany({
+        data: normalizedProviderSkills.map((category: string) => ({
+          providerId: user.id,
+          category,
+          experienceYears: 0,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     const tokenPayload = { userId: user.id, email: user.email, role: user.role };
     const accessToken = generateAccessToken(tokenPayload);
@@ -588,7 +622,8 @@ router.get('/profile', authMiddleware, async (req: Request, res: Response) => {
       where: { id: req.user!.userId },
       select: {
         id: true, email: true, name: true, avatarUrl: true,
-        phone: true, role: true, isVerified: true,
+        phone: true, bio: true, availabilityStatus: true,
+        role: true, isVerified: true,
         kycStatus: true, kycDocuments: true, password: true,
         createdAt: true, updatedAt: true,
       },
@@ -609,7 +644,7 @@ router.get('/profile', authMiddleware, async (req: Request, res: Response) => {
 // ─── PUT /api/auth/profile ─────────────────────────────
 router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { name, phone, avatarUrl } = req.body;
+    const { name, phone, avatarUrl, bio } = req.body;
     const updateData: any = {};
 
     // Validate fields if provided
@@ -645,12 +680,17 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
       updateData.avatarUrl = avatarUrl || null;
     }
 
+    if (bio !== undefined) {
+      updateData.bio = typeof bio === 'string' ? bio.trim() || null : null;
+    }
+
     const user = await prisma.user.update({
       where: { id: req.user!.userId },
       data: updateData,
       select: {
         id: true, email: true, name: true, avatarUrl: true,
-        phone: true, role: true, isVerified: true,
+        phone: true, bio: true, availabilityStatus: true,
+        role: true, isVerified: true,
         kycStatus: true, kycDocuments: true,
         createdAt: true, updatedAt: true,
       },

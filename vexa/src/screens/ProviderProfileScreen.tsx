@@ -6,7 +6,7 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import {
   ArrowLeft, Star, MapPin, Shield, Briefcase, Clock,
-  Award, ChevronRight, MessageCircle,
+  Award, ChevronRight, MessageCircle, Mail, Phone,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { fontFamilies } from '../theme/typography';
@@ -132,6 +132,24 @@ const ProviderProfileScreen: React.FC = () => {
           <View style={styles.statItem}>
             <Text style={styles.statValue}>₹{Math.round(profile.totalEarnings || 0).toLocaleString()}</Text>
             <Text style={styles.statLabel}>Earned</Text>
+          </View>
+        </View>
+
+        {/* Contact Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Contact Details</Text>
+          <View style={styles.contactCard}>
+            <View style={styles.contactRow}>
+              <Phone size={16} color={colors.gray400} />
+              <Text style={styles.contactLabel}>Phone</Text>
+              <Text style={styles.contactValue}>{profile.phone || 'Not provided'}</Text>
+            </View>
+            <View style={styles.contactDivider} />
+            <View style={styles.contactRow}>
+              <Mail size={16} color={colors.gray400} />
+              <Text style={styles.contactLabel}>Email</Text>
+              <Text style={styles.contactValue} numberOfLines={1}>{profile.email || 'Not provided'}</Text>
+            </View>
           </View>
         </View>
 
@@ -399,6 +417,36 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  contactCard: {
+    backgroundColor: colors.gray800,
+    borderRadius: 14,
+    borderWidth: 0.5,
+    borderColor: colors.glassBorder,
+    overflow: 'hidden',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  contactDivider: {
+    height: 0.5,
+    backgroundColor: colors.glassBorder,
+  },
+  contactLabel: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 13,
+    color: colors.gray300,
+    width: 48,
+  },
+  contactValue: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    color: colors.white,
+    flex: 1,
   },
   // Section
   section: {

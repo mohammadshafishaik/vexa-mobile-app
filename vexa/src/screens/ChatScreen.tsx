@@ -5,7 +5,7 @@ import {
   ActivityIndicator, SafeAreaView, Image, ScrollView,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { ArrowLeft, Send, Image as ImageIcon, Check, CheckCheck } from 'lucide-react-native';
+import { ArrowLeft, Send, Check, CheckCheck } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { fontFamilies } from '../theme/typography';
 import { ChatMessage } from '../types';
@@ -26,6 +26,7 @@ const ChatScreen: React.FC = () => {
   const [sending, setSending] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
   const [smartReplies, setSmartReplies] = useState<string[]>([]);
+  const [aiSafetyNote, setAiSafetyNote] = useState('');
   const [isGeneratingReplies, setIsGeneratingReplies] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,8 +87,31 @@ const ChatScreen: React.FC = () => {
     };
   }, [jobId, user?.id, loadMessages]);
 
+  const getAiMessageSeed = useCallback((latestMessage?: string) => {
+    const directSeed = (latestMessage || '').trim();
+    if (directSeed) return directSeed;
+
+    const latestIncoming = [...messages]
+      .reverse()
+      .find((message) => message.senderId !== user?.id && String(message.content || '').trim().length > 0);
+
+    if (latestIncoming?.content) {
+      return latestIncoming.content.trim();
+    }
+
+    const latestMessageInThread = [...messages]
+      .reverse()
+      .find((message) => String(message.content || '').trim().length > 0);
+
+    if (latestMessageInThread?.content) {
+      return latestMessageInThread.content.trim();
+    }
+
+    return inputText.trim();
+  }, [messages, user?.id, inputText]);
+
   const generateSmartReplies = useCallback(async (latestMessage?: string) => {
-    const messageSeed = (latestMessage || '').trim();
+    const messageSeed = getAiMessageSeed(latestMessage);
     if (!messageSeed) {
       setSmartReplies([]);
       return;
@@ -100,12 +124,14 @@ const ChatScreen: React.FC = () => {
         draft: inputText,
       });
       setSmartReplies(recommendation.quickReplies || []);
+      setAiSafetyNote(recommendation.safetyNote || '');
     } catch {
       setSmartReplies([]);
+      setAiSafetyNote('');
     } finally {
       setIsGeneratingReplies(false);
     }
-  }, [inputText]);
+  }, [inputText, getAiMessageSeed]);
 
   useEffect(() => {
     if (!messages.length || !user?.id) return;
@@ -115,6 +141,10 @@ const ChatScreen: React.FC = () => {
       generateSmartReplies(latest.content);
     }
   }, [messages, user?.id, generateSmartReplies]);
+
+  const aiSectionLabel = user?.role === 'PROVIDER'
+    ? 'Provider AI Assistant'
+    : 'Customer AI Assistant';
 
   const handleSend = async () => {
     const text = inputText.trim();
@@ -273,20 +303,21 @@ const ChatScreen: React.FC = () => {
           }
         />
 
-        {(isGeneratingReplies || smartReplies.length > 0) && (
-          <View style={styles.aiSuggestionsWrap}>
-            <View style={styles.aiSuggestionsHeader}>
-              <Text style={styles.aiSuggestionsLabel}>AI Quick Replies</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  const latest = messages[messages.length - 1];
-                  generateSmartReplies(latest?.content || '');
-                }}
-                disabled={isGeneratingReplies}
-              >
-                <Text style={styles.aiRefreshText}>{isGeneratingReplies ? 'Generating...' : 'Refresh'}</Text>
-              </TouchableOpacity>
-            </View>
+        <View style={styles.aiSuggestionsWrap}>
+          <View style={styles.aiSuggestionsHeader}>
+            <Text style={styles.aiSuggestionsLabel}>{aiSectionLabel}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                const latest = messages[messages.length - 1];
+                generateSmartReplies(latest?.content || '');
+              }}
+              disabled={isGeneratingReplies}
+            >
+              <Text style={styles.aiRefreshText}>{isGeneratingReplies ? 'Generating...' : 'Generate Replies'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {smartReplies.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {smartReplies.map((reply, index) => (
                 <TouchableOpacity
@@ -298,8 +329,16 @@ const ChatScreen: React.FC = () => {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
-        )}
+          ) : (
+            <Text style={styles.aiEmptyText}>
+              Tap "Generate Replies" to get context-aware AI suggestions.
+            </Text>
+          )}
+
+          {aiSafetyNote ? (
+            <Text style={styles.aiSafetyText}>{aiSafetyNote}</Text>
+          ) : null}
+        </View>
 
         {/* Input */}
         <View style={styles.inputContainer}>
@@ -511,6 +550,18 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.regular,
     fontSize: 13,
     color: colors.white,
+  },
+  aiEmptyText: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: colors.gray500,
+    marginBottom: 8,
+  },
+  aiSafetyText: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 11,
+    color: colors.gray500,
+    marginBottom: 6,
   },
   // Input
   inputContainer: {

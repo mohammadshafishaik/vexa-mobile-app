@@ -1,25 +1,13 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authMiddleware } from '../middleware/auth';
+import { AVAILABLE_SERVICE_CATEGORIES, normalizeServiceCategory } from '../utils/serviceCategories';
 
 const router = Router();
 
-// Available categories in the system
-const AVAILABLE_CATEGORIES = [
-  'plumbing',
-  'electrical',
-  'cleaning',
-  'painting',
-  'carpentry',
-  'appliance repair',
-  'ac service',
-  'pest control',
-  'other',
-];
-
 // ─── GET /api/skills/categories — list all available categories ──
 router.get('/categories', authMiddleware, async (_req: Request, res: Response) => {
-  res.json({ success: true, data: AVAILABLE_CATEGORIES });
+  res.json({ success: true, data: AVAILABLE_SERVICE_CATEGORIES });
 });
 
 // ─── GET /api/skills/my — get my skills ──────────────────
@@ -65,12 +53,12 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const normalizedCategory = category.trim().toLowerCase();
+    const normalizedCategory = normalizeServiceCategory(category);
 
-    if (!AVAILABLE_CATEGORIES.includes(normalizedCategory)) {
+    if (!AVAILABLE_SERVICE_CATEGORIES.includes(normalizedCategory as any)) {
       res.status(400).json({
         success: false,
-        message: `Invalid category. Available: ${AVAILABLE_CATEGORIES.join(', ')}`,
+        message: `Invalid category. Available: ${AVAILABLE_SERVICE_CATEGORIES.join(', ')}`,
       });
       return;
     }
@@ -127,10 +115,10 @@ router.post('/bulk', authMiddleware, async (req: Request, res: Response) => {
     // Validate all categories
     const validated = skills
       .map((s: any) => ({
-        category: String(s.category || '').trim().toLowerCase(),
+        category: normalizeServiceCategory(s.category),
         experienceYears: Number(s.experienceYears) || 0,
       }))
-      .filter((s) => AVAILABLE_CATEGORIES.includes(s.category));
+      .filter((s) => AVAILABLE_SERVICE_CATEGORIES.includes(s.category as any));
 
     if (validated.length === 0) {
       res.status(400).json({ success: false, message: 'No valid skills provided' });

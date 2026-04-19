@@ -37,6 +37,7 @@ import { socketService } from '../services/socket';
 import api from '../services/api';
 import { uploadService } from '../services/upload';
 import { userService } from '../services/users';
+import { availabilityService } from '../services/availability';
 import { deriveKycDisplayStatus } from '../utils/kyc';
 
 const ProfileScreen: React.FC = () => {
@@ -51,6 +52,7 @@ const ProfileScreen: React.FC = () => {
     reviewCount: 0,
   });
   const [isKycUploading, setIsKycUploading] = useState(false);
+  const [isTogglingAvailability, setIsTogglingAvailability] = useState(false);
 
   // Fetch stats on focus
   useFocusEffect(
@@ -104,6 +106,9 @@ const ProfileScreen: React.FC = () => {
   };
 
   const kycDocuments = Array.isArray(user?.kycDocuments) ? user.kycDocuments : [];
+  const providerAvailability = user?.role === 'PROVIDER'
+    ? (user?.availabilityStatus || 'OFFLINE')
+    : null;
   const kycDisplayStatus = deriveKycDisplayStatus({
     kycStatus: user?.kycStatus,
     kycDocuments,
@@ -237,6 +242,27 @@ const ProfileScreen: React.FC = () => {
 
   const menuItems = [...baseMenuItems, ...providerMenuItems, ...utilityMenuItems];
 
+  const handleQuickAvailabilityToggle = async () => {
+    if (!providerAvailability || isTogglingAvailability) {
+      return;
+    }
+
+    const nextStatus = providerAvailability === 'ONLINE' ? 'OFFLINE' : 'ONLINE';
+    setIsTogglingAvailability(true);
+
+    try {
+      await availabilityService.setStatus(nextStatus);
+      updateUser({ availabilityStatus: nextStatus });
+    } catch (error: any) {
+      Alert.alert(
+        'Unable to Update Availability',
+        error?.response?.data?.message || 'Please try again in a moment.',
+      );
+    } finally {
+      setIsTogglingAvailability(false);
+    }
+  };
+
   return (
     <ScreenContainer>
       <ScrollView
@@ -259,6 +285,15 @@ const ProfileScreen: React.FC = () => {
             textStyle={styles.userName}
           />
           <Text style={styles.userEmail}>{user?.email ?? 'user@vexa.app'}</Text>
+          {user?.phone ? (
+            <Text style={styles.profileMetaText}>Phone: {user.phone}</Text>
+          ) : null}
+          {providerAvailability ? (
+            <Text style={styles.profileMetaText}>Availability: {providerAvailability}</Text>
+          ) : null}
+          {user?.bio ? (
+            <Text style={styles.profileBio} numberOfLines={3}>{user.bio}</Text>
+          ) : null}
           <Badge
             label={user?.role ?? 'CUSTOMER'}
             color={colors.white}
@@ -270,6 +305,41 @@ const ProfileScreen: React.FC = () => {
 
         {/* Stats Card */}
         <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+          {providerAvailability ? (
+            <GlassCard style={styles.quickAvailabilityCard}>
+              <View style={styles.quickAvailabilityInfo}>
+                <Text style={styles.quickAvailabilityTitle}>
+                  {providerAvailability === 'ONLINE' ? 'You are available for jobs' : 'You are currently offline'}
+                </Text>
+                <Text style={styles.quickAvailabilityHint}>
+                  {providerAvailability === 'ONLINE'
+                    ? 'Tap below to pause new job requests.'
+                    : 'Tap below to start receiving jobs instantly.'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickAvailabilityButton,
+                  providerAvailability === 'ONLINE'
+                    ? styles.quickAvailabilityButtonOffline
+                    : styles.quickAvailabilityButtonOnline,
+                ]}
+                onPress={handleQuickAvailabilityToggle}
+                disabled={isTogglingAvailability}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.quickAvailabilityButtonText}>
+                  {isTogglingAvailability
+                    ? 'Updating...'
+                    : providerAvailability === 'ONLINE'
+                      ? 'Go Offline'
+                      : 'Go Online'}
+                </Text>
+              </TouchableOpacity>
+            </GlassCard>
+          ) : null}
+
           <GlassCard style={styles.statsCard}>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
@@ -394,8 +464,53 @@ const styles = StyleSheet.create({
     color: colors.gray500,
     marginTop: spacing[1],
   },
+  profileMetaText: {
+    ...typography.caption,
+    color: colors.gray500,
+    marginTop: spacing[1],
+  },
+  profileBio: {
+    ...typography.bodySm,
+    color: colors.gray400,
+    marginTop: spacing[2],
+    textAlign: 'center',
+    maxWidth: '90%',
+  },
   statsCard: {
     marginBottom: spacing[5],
+  },
+  quickAvailabilityCard: {
+    marginBottom: spacing[4],
+    gap: spacing[3],
+  },
+  quickAvailabilityInfo: {
+    gap: spacing[1],
+  },
+  quickAvailabilityTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.white,
+  },
+  quickAvailabilityHint: {
+    ...typography.caption,
+    color: colors.gray400,
+  },
+  quickAvailabilityButton: {
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing[3],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickAvailabilityButtonOnline: {
+    backgroundColor: colors.success,
+  },
+  quickAvailabilityButtonOffline: {
+    backgroundColor: colors.gray700,
+  },
+  quickAvailabilityButtonText: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.white,
   },
   verificationCard: {
     marginBottom: spacing[5],

@@ -36,7 +36,7 @@ export default function DashboardPage() {
     <div className="space-y-4 md:space-y-6">
       <PageTitle
         title="Operations Overview"
-        subtitle="Live pulse of users, jobs, compliance, disputes, and payments across the VEXA marketplace."
+        subtitle="Live pulse of users, jobs, compliance, disputes, payments, and advanced marketplace features."
       />
 
       {overview.loading ? <LoadingBlock label="Loading overview metrics..." /> : null}
@@ -46,6 +46,7 @@ export default function DashboardPage() {
         <>
           <StatGrid>
             <StatCard label="Total users" value={overview.data.users.total} hint={`${overview.data.users.providers} providers`} />
+            <StatCard label="Providers online" value={overview.data.advanced.onlineProviders} hint="Real-time availability signal" />
             <StatCard label="Active jobs" value={overview.data.jobs.active} hint={`${overview.data.jobs.total} total jobs`} />
             <StatCard label="Open disputes" value={overview.data.disputes.open} hint={`${overview.data.disputes.total} total disputes`} />
             <StatCard
@@ -73,6 +74,27 @@ export default function DashboardPage() {
                 <div className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
                   <p className="text-xs uppercase tracking-[0.14em] text-[var(--ink-dim)]">Banned users</p>
                   <p className="mt-1 text-2xl font-bold">{overview.data.users.banned}</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Advanced Features" subtitle="Coverage of chat, skills, portfolio, and cancellation flows.">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--ink-dim)]">Chat messages</p>
+                  <p className="mt-1 text-2xl font-bold">{overview.data.advanced.totalChatMessages}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--ink-dim)]">Provider skills</p>
+                  <p className="mt-1 text-2xl font-bold">{overview.data.advanced.totalProviderSkills}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--ink-dim)]">Portfolio items</p>
+                  <p className="mt-1 text-2xl font-bold">{overview.data.advanced.totalPortfolioItems}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--ink-dim)]">Cancellations</p>
+                  <p className="mt-1 text-2xl font-bold">{overview.data.advanced.totalCancellations}</p>
                 </div>
               </div>
             </Card>

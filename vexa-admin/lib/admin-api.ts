@@ -20,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api';
+const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://vexa-backend-hx9v.onrender.com/api';
 
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = tokenStore.getRefreshToken();

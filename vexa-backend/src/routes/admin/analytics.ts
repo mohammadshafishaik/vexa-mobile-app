@@ -28,6 +28,11 @@ router.get('/analytics/overview', async (_req: Request, res: Response) => {
       totalKycDocs,
       pendingKycDocs,
       openAnomalies,
+      totalChatMessages,
+      totalProviderSkills,
+      totalPortfolioItems,
+      totalCancellations,
+      onlineProviders,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { role: 'CUSTOMER' } }),
@@ -58,6 +63,11 @@ router.get('/analytics/overview', async (_req: Request, res: Response) => {
       prisma.kycDocument.count(),
       prisma.kycDocument.count({ where: { status: 'PENDING' } }),
       prisma.bidAnomaly.count({ where: { status: { in: ['OPEN', 'REVIEWED'] } } }),
+      prisma.chatMessage.count(),
+      prisma.providerSkill.count(),
+      prisma.portfolioItem.count(),
+      prisma.cancellation.count(),
+      prisma.user.count({ where: { role: 'PROVIDER', availabilityStatus: 'ONLINE' } }),
     ]);
 
     res.json({
@@ -94,6 +104,13 @@ router.get('/analytics/overview', async (_req: Request, res: Response) => {
         },
         bidding: {
           openAnomalies,
+        },
+        advanced: {
+          totalChatMessages,
+          totalProviderSkills,
+          totalPortfolioItems,
+          totalCancellations,
+          onlineProviders,
         },
       },
     });

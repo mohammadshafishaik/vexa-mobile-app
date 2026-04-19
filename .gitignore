@@ -1,5 +1,6 @@
 # Workspace-level private files
 vexa-backend.env
+vexa-backend (1).env
 DEPLOY_WITH_CREDENTIALS.md
 DEPLOY_STEPS_PRIVATE.md
 PRIVATE_CREDENTIALS.md

@@ -29,6 +29,13 @@ export interface DashboardOverview {
   bidding: {
     openAnomalies: number;
   };
+  advanced: {
+    totalChatMessages: number;
+    totalProviderSkills: number;
+    totalPortfolioItems: number;
+    totalCancellations: number;
+    onlineProviders: number;
+  };
 }
 
 export interface Paginated<T> {

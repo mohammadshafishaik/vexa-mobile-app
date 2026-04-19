@@ -46,11 +46,24 @@ import api from '../services/api';
 
 type RegisterNav = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
+const PROVIDER_SERVICE_CATEGORIES = [
+  { label: 'Plumbing', value: 'plumbing' },
+  { label: 'Electrical', value: 'electrical' },
+  { label: 'Cleaning', value: 'cleaning' },
+  { label: 'Painting', value: 'painting' },
+  { label: 'Carpentry', value: 'carpentry' },
+  { label: 'Appliance Repair', value: 'appliance repair' },
+  { label: 'AC Service', value: 'ac service' },
+  { label: 'Pest Control', value: 'pest control' },
+  { label: 'Other', value: 'other' },
+] as const;
+
 const RegisterScreen: React.FC = () => {
   const navigation = useNavigation<RegisterNav>();
   const login = useAuthStore((s) => s.login);
 
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [selectedProviderSkills, setSelectedProviderSkills] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -77,6 +90,18 @@ const RegisterScreen: React.FC = () => {
     if (phoneError) setPhoneError(null);
   };
 
+  const toggleProviderSkill = (skill: string) => {
+    setSelectedProviderSkills((prev) => (
+      prev.includes(skill)
+        ? prev.filter((item) => item !== skill)
+        : [...prev, skill]
+    ));
+
+    if (generalError) {
+      setGeneralError(null);
+    }
+  };
+
   const validateAll = (): boolean => {
     const nameErr = validateName(name);
     const emailErr = validateEmail(email);
@@ -90,13 +115,16 @@ const RegisterScreen: React.FC = () => {
     setPasswordError(pwErr);
     setConfirmError(confirmErr);
 
-    return !nameErr && !emailErr && !phoneErr && !pwErr && !confirmErr && !!selectedRole;
+    const providerSkillsValid = selectedRole !== UserRole.PROVIDER || selectedProviderSkills.length > 0;
+    return !nameErr && !emailErr && !phoneErr && !pwErr && !confirmErr && !!selectedRole && providerSkillsValid;
   };
 
   const handleComplete = async () => {
     if (!validateAll()) {
       if (!selectedRole) {
         setGeneralError('Please select a role (Customer or Provider)');
+      } else if (selectedRole === UserRole.PROVIDER && selectedProviderSkills.length === 0) {
+        setGeneralError('Please select at least one service category to continue as a provider.');
       }
       return;
     }
@@ -111,6 +139,7 @@ const RegisterScreen: React.FC = () => {
         phone: phone || null,
         role: selectedRole,
         password: password.trim(),
+        initialSkills: selectedRole === UserRole.PROVIDER ? selectedProviderSkills : undefined,
       });
 
       if (response.data.success) {
@@ -132,6 +161,7 @@ const RegisterScreen: React.FC = () => {
 
   const isFormValid =
     selectedRole &&
+    (selectedRole !== UserRole.PROVIDER || selectedProviderSkills.length > 0) &&
     name.trim().length >= 2 &&
     !validateEmail(email) &&
     passwordStrength.isValid &&
@@ -189,6 +219,7 @@ const RegisterScreen: React.FC = () => {
                 ]}
                 onPress={() => {
                   setSelectedRole(UserRole.CUSTOMER);
+                  setSelectedProviderSkills([]);
                   if (generalError) setGeneralError(null);
                 }}
                 activeOpacity={0.7}
@@ -256,6 +287,32 @@ const RegisterScreen: React.FC = () => {
                 <Text style={styles.roleDesc}>Offer services</Text>
               </TouchableOpacity>
             </View>
+
+            {selectedRole === UserRole.PROVIDER && (
+              <View style={styles.skillsContainer}>
+                <Text style={styles.skillsTitle}>Select Your Service Categories</Text>
+                <Text style={styles.skillsSubtitle}>
+                  Choose at least one category so matching customer jobs appear immediately.
+                </Text>
+                <View style={styles.skillsGrid}>
+                  {PROVIDER_SERVICE_CATEGORIES.map((item) => {
+                    const isSelected = selectedProviderSkills.includes(item.value);
+                    return (
+                      <TouchableOpacity
+                        key={item.value}
+                        style={[styles.skillChip, isSelected && styles.skillChipSelected]}
+                        onPress={() => toggleProviderSkill(item.value)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.skillChipText, isSelected && styles.skillChipTextSelected]}>
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </Animated.View>
 
           {/* Profile Form */}
@@ -495,6 +552,45 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.regular,
     fontSize: fontSizes.xs,
     color: colors.gray600,
+  },
+  skillsContainer: {
+    marginTop: spacing[4],
+  },
+  skillsTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.white,
+    marginBottom: spacing[1],
+  },
+  skillsSubtitle: {
+    ...typography.bodySm,
+    color: colors.gray500,
+    marginBottom: spacing[3],
+  },
+  skillsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  skillChip: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.gray700,
+    backgroundColor: colors.gray900,
+  },
+  skillChipSelected: {
+    borderColor: colors.white,
+    backgroundColor: colors.white,
+  },
+  skillChipText: {
+    ...typography.bodySm,
+    color: colors.gray400,
+  },
+  skillChipTextSelected: {
+    color: colors.black,
+    fontFamily: fontFamilies.semibold,
   },
   submitArea: {
     marginTop: spacing[4],

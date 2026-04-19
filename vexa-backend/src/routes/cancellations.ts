@@ -159,28 +159,6 @@ router.post('/:jobId', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-// ─── GET /api/cancellations/:jobId — get cancellation details ──
-router.get('/:jobId', authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const cancellation = await prisma.cancellation.findFirst({
-      where: { jobId: req.params.jobId as string },
-      include: {
-        cancelledBy: { select: { id: true, name: true, avatarUrl: true, role: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!cancellation) {
-      res.status(404).json({ success: false, message: 'No cancellation record found' });
-      return;
-    }
-
-    res.json({ success: true, data: cancellation });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
 // ─── GET /api/cancellations/history/my — get cancellation history ──
 router.get('/history/my', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -208,6 +186,28 @@ router.get('/history/my', authMiddleware, async (req: Request, res: Response) =>
       limit: Number(limit),
       hasMore: skip + cancellations.length < total,
     });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ─── GET /api/cancellations/:jobId — get cancellation details ──
+router.get('/:jobId', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const cancellation = await prisma.cancellation.findFirst({
+      where: { jobId: req.params.jobId as string },
+      include: {
+        cancelledBy: { select: { id: true, name: true, avatarUrl: true, role: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!cancellation) {
+      res.status(404).json({ success: false, message: 'No cancellation record found' });
+      return;
+    }
+
+    res.json({ success: true, data: cancellation });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

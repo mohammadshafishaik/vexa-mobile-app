@@ -51,6 +51,7 @@ router.post('/chat', authMiddleware, async (req: Request, res: Response) => {
       jobTitle: req.body?.jobTitle,
       draft: req.body?.draft,
       jobStatus: req.body?.jobStatus,
+      userRole: req.user?.role,
     });
 
     res.json({ success: true, data });

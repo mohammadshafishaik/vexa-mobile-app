@@ -9,6 +9,7 @@ import { colors } from '../../theme/colors';
 import { fontFamilies } from '../../theme/typography';
 import { ProviderAvailabilitySlot, ProviderAvailabilityStatus } from '../../types';
 import { availabilityService } from '../../services/availability';
+import { useAuthStore } from '../../store/useAuthStore';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const TIME_OPTIONS = [
@@ -19,7 +20,9 @@ const TIME_OPTIONS = [
 
 const AvailabilityScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const [status, setStatus] = useState<ProviderAvailabilityStatus>('OFFLINE');
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const initialAvailability = useAuthStore((s) => s.user?.availabilityStatus || 'OFFLINE');
+  const [status, setStatus] = useState<ProviderAvailabilityStatus>(initialAvailability);
   const [slots, setSlots] = useState<Record<number, { startTime: string; endTime: string; isBlocked: boolean; enabled: boolean }>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,6 +31,7 @@ const AvailabilityScreen: React.FC = () => {
     try {
       const data = await availabilityService.getMyAvailability();
       setStatus(data.status);
+      updateUser({ availabilityStatus: data.status });
 
       // Initialize all 7 days
       const slotsMap: typeof slots = {};
@@ -57,6 +61,7 @@ const AvailabilityScreen: React.FC = () => {
     try {
       await availabilityService.setStatus(newStatus);
       setStatus(newStatus);
+      updateUser({ availabilityStatus: newStatus });
     } catch (error) {
       console.error('Failed to toggle status:', error);
     }

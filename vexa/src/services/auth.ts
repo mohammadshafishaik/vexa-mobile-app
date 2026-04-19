@@ -39,6 +39,7 @@ export const authService = {
     password: string;
     phone?: string;
     role: 'CUSTOMER' | 'PROVIDER';
+    initialSkills?: string[];
   }): Promise<LoginResponse> => {
     const response = await api.post<ApiResponse<LoginResponse>>(
       '/custom-auth/register',

@@ -24,6 +24,15 @@ const getMinimumPriceForCategory = (category: string): number => {
   return CATEGORY_MIN_PRICE[key] ?? DEFAULT_MIN_PRICE;
 };
 
+const sanitizeJobDescription = (value: string): string => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const markerIndex = raw.toLowerCase().indexOf('ai summary:');
+  const withoutSummary = markerIndex >= 0 ? raw.slice(0, markerIndex) : raw;
+  return withoutSummary.replace(/\s+/g, ' ').trim();
+};
+
 const generateOrderIdCandidate = (): string => {
   const now = new Date();
   const year = String(now.getFullYear());
@@ -77,10 +86,14 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 
       // Providers see POSTED/BIDDING jobs matching their skills, or jobs assigned to them
       if (skillCategories.length > 0) {
+        const categoryFilters = skillCategories.map((skillCategory) => ({
+          category: { equals: skillCategory, mode: 'insensitive' as const },
+        }));
+
         where.OR = [
           {
             status: { in: ['POSTED', 'BIDDING'] },
-            category: { in: skillCategories, mode: 'insensitive' },
+            OR: categoryFilters,
           },
           { selectedProviderId: userId },
         ];
@@ -90,16 +103,6 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
           { status: { in: ['POSTED', 'BIDDING'] } },
           { selectedProviderId: userId },
         ];
-      }
-
-      // Check provider availability — only show if provider is ONLINE
-      const provider = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { availabilityStatus: true },
-      });
-      // If provider is OFFLINE, only show their assigned jobs
-      if (provider?.availabilityStatus === 'OFFLINE') {
-        where.OR = [{ selectedProviderId: userId }];
       }
     }
 
@@ -168,9 +171,14 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       }
     }
 
+    const sanitizedJobs = filteredJobs.map((job) => ({
+      ...job,
+      description: sanitizeJobDescription(job.description),
+    }));
+
     res.json({
       success: true,
-      data: filteredJobs,
+      data: sanitizedJobs,
       total: lat && lng ? filteredJobs.length : total,
       page: Number(page),
       limit: Number(limit),
@@ -185,8 +193,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 router.post('/', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { title, description, category, location, latitude, longitude, images, originalPrice, urgency } = req.body;
+    const cleanedDescription = sanitizeJobDescription(description);
 
-    if (!title || !description || !category || !location) {
+    if (!title || !cleanedDescription || !category || !location) {
       res.status(400).json({ success: false, message: 'Missing required fields (title, description, category, location)' });
       return;
     }
@@ -208,7 +217,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         orderId,
         customerId: req.user!.userId,
         title,
-        description,
+        description: cleanedDescription,
         category,
         location,
         latitude: latitude || null,
@@ -255,7 +264,13 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data: job });
+    res.json({
+      success: true,
+      data: {
+        ...job,
+        description: sanitizeJobDescription(job.description),
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

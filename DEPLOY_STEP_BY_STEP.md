@@ -98,11 +98,22 @@ If you get Prisma P1001/P1017 from laptop, use Method A.
    - NEXT_PUBLIC_API_BASE_URL = https://vexa-backend-hx9v.onrender.com/api
 3. Deploy and copy final admin URL.
 4. After deploy, update backend CORS in Render:
-   - CORS_ALLOWED_ORIGINS = https://<your-vercel-admin-url>,http://localhost:3001,http://127.0.0.1:3001
+   - CORS_ALLOWED_ORIGINS = https://<your-vercel-production-domain>,https://<your-current-vercel-deployment-domain>
+   - Use origin only (scheme + host), no trailing slash and no path.
+   - Example: https://vexa-admin.vercel.app,https://vexa-admin-git-main-yourname.vercel.app
 
 ## Phase 6: Redeploy Backend After CORS Update
 
 After adding your Vercel admin URL to CORS_ALLOWED_ORIGINS, redeploy backend once.
+
+### If Login Shows "Failed to fetch"
+
+1. Verify Vercel env var exists and is correct:
+   - NEXT_PUBLIC_API_BASE_URL = https://vexa-backend-hx9v.onrender.com/api
+2. Make sure CORS_ALLOWED_ORIGINS contains the exact URL you opened in browser.
+3. Do not include trailing slash in CORS origins.
+4. Redeploy backend after CORS change.
+5. Redeploy Vercel after env change.
 
 ## Phase 7: Test End-to-End
 

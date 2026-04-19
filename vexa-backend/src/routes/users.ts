@@ -323,6 +323,8 @@ router.patch('/profile', authMiddleware, async (req: Request, res: Response) => 
         email: true,
         avatarUrl: true,
         phone: true,
+        bio: true,
+        availabilityStatus: true,
         role: true,
         isVerified: true,
         kycStatus: true,

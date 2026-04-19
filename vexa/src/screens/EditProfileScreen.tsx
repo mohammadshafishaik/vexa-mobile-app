@@ -15,7 +15,7 @@ import {
   ChevronLeft,
   UserCircle,
   Phone,
-  Check,
+  FileText,
 } from 'lucide-react-native';
 import ScreenContainer from '../components/layout/ScreenContainer';
 import Button from '../components/ui/Button';
@@ -41,6 +41,7 @@ const EditProfileScreen: React.FC = () => {
 
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [bio, setBio] = useState(user?.bio || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -48,7 +49,8 @@ const EditProfileScreen: React.FC = () => {
 
   const hasChanges =
     name.trim() !== (user?.name || '') ||
-    getPhoneDigits(phone) !== (user?.phone || '');
+    getPhoneDigits(phone) !== (user?.phone || '') ||
+    bio.trim() !== (user?.bio || '');
 
   const handleSave = async () => {
     const nameErr = validateName(name);
@@ -64,6 +66,7 @@ const EditProfileScreen: React.FC = () => {
       const response = await api.put('/custom-auth/profile', {
         name: name.trim(),
         phone: getPhoneDigits(phone) || null,
+        bio: bio.trim() || null,
       });
 
       if (response.data.success) {
@@ -157,6 +160,18 @@ const EditProfileScreen: React.FC = () => {
                 maxLength={11}
                 icon={<Phone size={18} color={phoneError ? colors.error : colors.gray500} />}
                 hint="10 digit mobile number"
+              />
+
+              <Input
+                label="Bio"
+                placeholder="Tell others about your expertise and service style"
+                value={bio}
+                onChangeText={setBio}
+                icon={<FileText size={18} color={colors.gray500} />}
+                multiline
+                numberOfLines={3}
+                maxLength={240}
+                hint="Visible on your public profile"
               />
 
               {/* Email (read-only) */}

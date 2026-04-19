@@ -1,10 +1,11 @@
 import api from './api';
-import { Cancellation } from '../types';
+import { Cancellation, ServiceRequest } from '../types';
 
 export const cancellationService = {
   // Cancel a job
   cancelJob: async (jobId: string, reason: string): Promise<{
     cancellation: Cancellation;
+    job: ServiceRequest;
     feeApplied: number;
     ratingPenalty: boolean;
   }> => {

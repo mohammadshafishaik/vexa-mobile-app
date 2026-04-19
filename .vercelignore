@@ -1,0 +1,12 @@
+# Deploy only the admin app from this monorepo root
+*
+!.vercel
+!.vercel/**
+!vexa-admin
+!vexa-admin/**
+
+# Exclude generated and dependency folders inside admin app
+vexa-admin/node_modules
+vexa-admin/.next
+vexa-admin/.turbo
+vexa-admin/.git

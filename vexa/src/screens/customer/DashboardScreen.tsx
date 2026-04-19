@@ -22,7 +22,7 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { ServiceRequest } from '../../types';
-import { formatCurrency, formatRelativeTime, truncateText } from '../../utils/helpers';
+import { formatCurrency, formatRelativeTime, sanitizeJobDescription, truncateText } from '../../utils/helpers';
 import api from '../../services/api';
 
 const CustomerDashboardScreen: React.FC = () => {
@@ -88,7 +88,7 @@ const CustomerDashboardScreen: React.FC = () => {
         </View>
 
         <Text style={styles.jobDescription} numberOfLines={2}>
-          {truncateText(item.description, 100)}
+          {truncateText(sanitizeJobDescription(item.description), 100)}
         </Text>
 
         <View style={styles.jobMeta}>

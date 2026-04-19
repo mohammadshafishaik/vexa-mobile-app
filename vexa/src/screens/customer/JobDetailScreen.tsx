@@ -26,6 +26,7 @@ import {
   Zap,
   AlertTriangle,
   MessageCircle,
+  XCircle,
 } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
@@ -39,9 +40,10 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { JobStatus, CustomerStackParamList, ServiceRequest } from '../../types';
-import { formatCurrency, formatRelativeTime } from '../../utils/helpers';
+import { formatCurrency, formatRelativeTime, sanitizeJobDescription } from '../../utils/helpers';
 import { jobService } from '../../services/jobs';
 import { paymentService } from '../../services/payments';
+import { cancellationService } from '../../services/cancellations';
 import api from '../../services/api';
 import { resolveImageUrl } from '../../utils/image';
 import { isKycVerifiedStatus } from '../../utils/kyc';
@@ -89,6 +91,11 @@ const JobDetailScreen: React.FC = () => {
     job?.status === JobStatus.PAYMENT_PENDING
     && latestPayment?.paymentMethod === 'CASH'
     && latestPayment?.status === 'PENDING'
+  );
+  const canCancelJob = !!(
+    job
+    && (isCustomer || isAssignedProvider)
+    && ![JobStatus.COMPLETED, JobStatus.PAYMENT_PENDING, JobStatus.PAID, JobStatus.CANCELLED].includes(job.status)
   );
 
   useFocusEffect(
@@ -219,6 +226,66 @@ const JobDetailScreen: React.FC = () => {
     navigation.navigate('Dispute', { jobId });
   };
 
+  const handleCancelJobWithReason = (reason: string) => {
+    Alert.alert(
+      'Confirm Cancellation',
+      'Are you sure you want to cancel this job?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Job',
+          style: 'destructive',
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              const response = await cancellationService.cancelJob(jobId, reason);
+              if (response?.job) {
+                setJob(response.job as any);
+                setSelectedJob(response.job as any);
+              }
+
+              const feeMessage = response?.feeApplied && response.feeApplied > 0
+                ? ` Cancellation fee: ${formatCurrency(response.feeApplied)}.`
+                : '';
+
+              Alert.alert('Cancelled', `Job cancelled successfully.${feeMessage}`);
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.message || 'Failed to cancel job');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleCancelJob = () => {
+    const reasonOptions = isCustomer
+      ? [
+          'No longer required',
+          'Found another provider',
+          'Schedule changed',
+          'Posted by mistake',
+        ]
+      : [
+          'Unable to reach location',
+          'Personal emergency',
+          'Scope mismatch',
+          'Schedule conflict',
+        ];
+
+    Alert.alert(
+      'Cancel Job',
+      'Select a reason for cancellation.',
+      [
+        ...reasonOptions.map((reason) => ({ text: reason, onPress: () => handleCancelJobWithReason(reason) })),
+        { text: 'Other', onPress: () => handleCancelJobWithReason('Cancelled due to unforeseen circumstances') },
+        { text: 'Back', style: 'cancel' as const },
+      ],
+    );
+  };
+
   const handleConfirmCashReceived = () => {
     Alert.alert(
       'Confirm Cash Receipt',
@@ -288,7 +355,7 @@ const JobDetailScreen: React.FC = () => {
           </View>
           <Text style={styles.jobTitle}>{job?.title ?? 'Service Request'}</Text>
           <Text style={styles.jobDescription}>
-            {job?.description ?? 'No description provided'}
+            {sanitizeJobDescription(job?.description || '') || 'No description provided'}
           </Text>
         </Animated.View>
 
@@ -617,6 +684,17 @@ const JobDetailScreen: React.FC = () => {
             </GlassCard>
           )}
 
+          {canCancelJob && (
+            <TouchableOpacity
+              style={[styles.cancelJobButton, actionLoading && styles.cancelJobButtonDisabled]}
+              onPress={handleCancelJob}
+              disabled={actionLoading}
+            >
+              <XCircle size={16} color={colors.error} />
+              <Text style={styles.cancelJobText}>{actionLoading ? 'Cancelling...' : 'Cancel Job'}</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Contact Support — always visible */}
           <TouchableOpacity style={styles.supportButton} onPress={handleContactSupport}>
             <Mail size={16} color={colors.gray400} />
@@ -823,6 +901,25 @@ const styles = StyleSheet.create({
     color: colors.warning,
     flex: 1,
     lineHeight: 20,
+  },
+  cancelJobButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing[3],
+  },
+  cancelJobButtonDisabled: {
+    opacity: 0.6,
+  },
+  cancelJobText: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.sm,
+    color: colors.error,
   },
   supportButton: {
     flexDirection: 'row',

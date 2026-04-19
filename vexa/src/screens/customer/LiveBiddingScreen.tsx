@@ -448,7 +448,7 @@ const LiveBiddingScreen: React.FC = () => {
             >
               <Sparkles size={14} color={colors.white} />
               <Text style={styles.aiBidButtonText}>
-                {isGeneratingBidAi ? 'Thinking...' : 'AI Recommend'}
+                {isGeneratingBidAi ? 'Thinking...' : 'Provider AI Recommend'}
               </Text>
             </TouchableOpacity>
 

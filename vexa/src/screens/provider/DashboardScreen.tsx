@@ -22,19 +22,43 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { useJobStore } from '../../store/useJobStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { ServiceRequest } from '../../types';
-import { formatCurrency, formatRelativeTime } from '../../utils/helpers';
+import { formatCurrency, formatRelativeTime, sanitizeJobDescription } from '../../utils/helpers';
 import api from '../../services/api';
+import { availabilityService } from '../../services/availability';
 import { isKycVerifiedStatus } from '../../utils/kyc';
 
 const ProviderDashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const jobs = useJobStore((s) => s.jobs);
   const setJobs = useJobStore((s) => s.setJobs);
   const setSelectedJob = useJobStore((s) => s.setSelectedJob);
   const isLoading = useJobStore((s) => s.isLoading);
   const setLoading = useJobStore((s) => s.setLoading);
   const [stats, setStats] = useState({ active: 0, completed: 0, earned: 0 });
+  const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
+
+  const providerAvailability = user?.availabilityStatus || 'OFFLINE';
+  const isProviderOnline = providerAvailability === 'ONLINE';
+
+  const handleQuickAvailabilityToggle = async () => {
+    if (isUpdatingAvailability) {
+      return;
+    }
+
+    const nextStatus = isProviderOnline ? 'OFFLINE' : 'ONLINE';
+    setIsUpdatingAvailability(true);
+
+    try {
+      await availabilityService.setStatus(nextStatus);
+      updateUser({ availabilityStatus: nextStatus });
+    } catch {
+      // Keep dashboard responsive even if network call fails.
+    } finally {
+      setIsUpdatingAvailability(false);
+    }
+  };
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -119,7 +143,7 @@ const ProviderDashboardScreen: React.FC = () => {
         )}
 
         <Text style={styles.jobDescription} numberOfLines={2}>
-          {item.description}
+          {sanitizeJobDescription(item.description)}
         </Text>
         <View style={styles.jobMeta}>
           <View style={styles.metaItem}>
@@ -159,6 +183,35 @@ const ProviderDashboardScreen: React.FC = () => {
             size="md"
           />
         </TouchableOpacity>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(60).duration(400)}>
+        <GlassCard style={styles.quickAvailabilityCard}>
+          <View>
+            <Text style={styles.quickAvailabilityTitle}>
+              {isProviderOnline ? 'Status: Online' : 'Status: Offline'}
+            </Text>
+            <Text style={styles.quickAvailabilityHint}>
+              {isProviderOnline
+                ? 'You are receiving new job requests.'
+                : 'Go online to receive new job requests.'}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.quickAvailabilityButton,
+              isProviderOnline ? styles.quickAvailabilityButtonOffline : styles.quickAvailabilityButtonOnline,
+            ]}
+            onPress={handleQuickAvailabilityToggle}
+            disabled={isUpdatingAvailability}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.quickAvailabilityButtonText}>
+              {isUpdatingAvailability ? 'Updating...' : isProviderOnline ? 'Go Offline' : 'Go Online'}
+            </Text>
+          </TouchableOpacity>
+        </GlassCard>
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.statsRow}>
@@ -246,6 +299,39 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.gray500,
     marginTop: 2,
+  },
+  quickAvailabilityCard: {
+    marginBottom: spacing[4],
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[3],
+  },
+  quickAvailabilityTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.white,
+  },
+  quickAvailabilityHint: {
+    ...typography.caption,
+    color: colors.gray500,
+    marginTop: 2,
+  },
+  quickAvailabilityButton: {
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  quickAvailabilityButtonOnline: {
+    backgroundColor: colors.success,
+  },
+  quickAvailabilityButtonOffline: {
+    backgroundColor: colors.gray700,
+  },
+  quickAvailabilityButtonText: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.sm,
+    color: colors.white,
   },
   statsRow: {
     flexDirection: 'row',

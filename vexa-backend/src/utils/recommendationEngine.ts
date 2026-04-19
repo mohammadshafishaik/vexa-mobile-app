@@ -23,6 +23,7 @@ type ChatRecommendationInput = {
   jobTitle?: string;
   draft?: string;
   jobStatus?: string;
+  userRole?: string;
 };
 
 export type JobRecommendationOutput = {
@@ -68,6 +69,14 @@ const normalizeCategory = (value?: string): string =>
 
 const normalizeText = (value?: string): string => String(value || '').trim();
 
+const stripPreviousAiSummary = (value: string): string => {
+  const markerIndex = value.toLowerCase().indexOf('ai summary:');
+  if (markerIndex >= 0) {
+    return value.slice(0, markerIndex).trim();
+  }
+  return value.trim();
+};
+
 const toSentenceCase = (value: string): string =>
   value.length ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 
@@ -99,7 +108,7 @@ export const recommendJobDescription = (
   input: JobRecommendationInput,
 ): JobRecommendationOutput => {
   const title = normalizeText(input.title);
-  const description = normalizeText(input.description);
+  const description = stripPreviousAiSummary(normalizeText(input.description));
   const category = normalizeCategory(input.category);
   const location = normalizeText(input.location);
   const budget = Number.isFinite(input.budget) ? Number(input.budget) : undefined;
@@ -113,16 +122,10 @@ export const recommendJobDescription = (
     title || `${toSentenceCase(category)} service required${location ? ` in ${location}` : ''}`;
 
   const baseDescription = description || 'Need a verified professional for this service request.';
-  const improvedDescription = [
-    baseDescription,
-    '',
-    'AI summary:',
-    `- Category: ${toSentenceCase(category)}`,
-    location ? `- Location: ${location}` : '- Location: To be confirmed',
-    `- Budget expectation: Around Rs ${recommended} (minimum Rs ${min})`,
-    `- Priority: ${String(input.urgency || 'NORMAL').toUpperCase()}`,
-    '- Please confirm visit ETA, tools/spares needed, and final scope before starting.',
-  ].join('\n');
+  const normalizedDescription = baseDescription.replace(/\s+/g, ' ').trim();
+  const improvedDescription = /[.!?]$/.test(normalizedDescription)
+    ? normalizedDescription
+    : `${normalizedDescription}.`;
 
   const warnings: string[] = [];
   if (typeof budget === 'number' && budget < min) {
@@ -222,6 +225,7 @@ export const recommendChatReplies = (
 ): ChatRecommendationOutput => {
   const latest = normalizeText(input.latestMessage).toLowerCase();
   const draft = normalizeText(input.draft);
+  const role = String(input.userRole || '').toUpperCase();
 
   let tone: 'professional' | 'friendly' | 'urgent' = 'professional';
   if (/(urgent|asap|now|immediately)/.test(latest)) {
@@ -233,23 +237,43 @@ export const recommendChatReplies = (
   const quickReplies: string[] = [];
 
   if (/(where|location|reach|arrive|eta|when)/.test(latest)) {
-    quickReplies.push('I am on the way and will share ETA shortly.');
-    quickReplies.push('I should reach in around 20-30 minutes depending on traffic.');
+    if (role === 'PROVIDER') {
+      quickReplies.push('I am on the way and will share ETA shortly.');
+      quickReplies.push('I should reach in around 20-30 minutes depending on traffic.');
+    } else {
+      quickReplies.push('Please share your latest ETA so I can plan accordingly.');
+      quickReplies.push('Can you confirm arrival time and current location?');
+    }
   }
 
   if (/(price|cost|charge|amount|budget)/.test(latest)) {
-    quickReplies.push('I will confirm final cost after a quick inspection to avoid surprises.');
-    quickReplies.push('Current estimate is within the agreed budget range.');
+    if (role === 'PROVIDER') {
+      quickReplies.push('I will confirm final cost after a quick inspection to avoid surprises.');
+      quickReplies.push('Current estimate is within the agreed budget range.');
+    } else {
+      quickReplies.push('Please confirm the final amount before starting work.');
+      quickReplies.push('Can you share a clear quote breakup for labor and parts?');
+    }
   }
 
   if (/(photo|image|picture)/.test(latest)) {
-    quickReplies.push('Please share a clear photo so I can confirm tools and parts needed.');
+    if (role === 'PROVIDER') {
+      quickReplies.push('Please share a clear photo so I can confirm tools and parts needed.');
+    } else {
+      quickReplies.push('I have shared photos. Please confirm if anything else is needed.');
+    }
   }
 
   if (!quickReplies.length) {
-    quickReplies.push('Got it. I will proceed and keep you updated step by step.');
-    quickReplies.push('Thanks for the update. I am coordinating this now.');
-    quickReplies.push('Understood. I will confirm once completed.');
+    if (role === 'PROVIDER') {
+      quickReplies.push('Got it. I will proceed and keep you updated step by step.');
+      quickReplies.push('Thanks for the update. I am coordinating this now.');
+      quickReplies.push('Understood. I will confirm once completed.');
+    } else {
+      quickReplies.push('Thanks. Please keep me posted on each step.');
+      quickReplies.push('Understood. Please share completion update once done.');
+      quickReplies.push('Got it. I will be available here if anything changes.');
+    }
   }
 
   if (draft.length > 0 && draft.length < 20) {

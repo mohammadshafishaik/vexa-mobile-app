@@ -90,6 +90,9 @@ const ProfileStackScreen: React.FC = () => {
       <ProfileStack.Screen name="ProfileHome" component={ProfileScreen} />
       <ProfileStack.Screen name="EditProfile" component={EditProfileScreen} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+      <ProfileStack.Screen name="SkillsManagement" component={SkillsManagementScreen} />
+      <ProfileStack.Screen name="PortfolioManagement" component={PortfolioManagementScreen} />
+      <ProfileStack.Screen name="Availability" component={AvailabilityScreen} />
     </ProfileStack.Navigator>
   );
 };
