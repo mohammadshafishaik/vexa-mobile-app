@@ -4,10 +4,10 @@
 
 | Field               | Detail                                      |
 |---------------------|---------------------------------------------|
-| **Document Version**| 1.0                                         |
+| **Document Version**| 1.1                                         |
 | **Date**            | April 2026                                  |
 | **Prepared By**     | VEXA Development Team                       |
-| **Status**          | Approved for Development                    |
+| **Status**          | Approved for Development and Operations      |
 | **Classification**  | Confidential                                |
 
 ---
@@ -20,6 +20,7 @@
 | 0.5     | Mar 2026   | Architecture Team  | Added bidding and payment specs   |
 | 0.9     | Apr 2026   | Architecture Team  | Integrated admin panel & KYC flow |
 | 1.0     | Apr 2026   | Architecture Team  | Final review and sign-off         |
+| 1.1     | Apr 2026   | Engineering Team   | Payment reliability clarifications: Razorpay receipt limit, webhook validation, and test/live mode alignment |
 
 ---
 
@@ -631,6 +632,9 @@ Key endpoint groups:
 | API Version | v1 |
 | Authentication | Key ID + Key Secret (server-side), Key ID (client-side) |
 | Operations  | Order creation, payment verification via HMAC-SHA256 signature |
+| Receipt Constraint | Razorpay `receipt` must be at most 40 characters |
+| Webhook Endpoint | `POST /api/payments/webhook` with `x-razorpay-signature` header |
+| Mode Separation | Test-mode keys/secrets/webhooks are independent from live-mode keys/secrets/webhooks |
 
 #### 4.3.4 Firebase Cloud Messaging
 
@@ -854,6 +858,16 @@ The following requirements are uniquely numbered and grouped by feature area. Pr
 | FR35 | The system shall track payment status transitions: PENDING → PROCESSING → COMPLETED/FAILED/REFUNDED. | P0 |
 | FR36 | The system shall transition the job status to `PAID` upon successful payment verification. | P0 |
 | FR37 | The system shall store Razorpay order ID, payment ID, and signature for audit and reconciliation. | P0 |
+
+#### 6.5.1 Online Payment Acceptance Clarification (Operational)
+
+| ID     | Requirement | Priority |
+|--------|-------------|----------|
+| FR37A  | The system shall generate Razorpay order `receipt` values with length less than or equal to 40 characters. | P0 |
+| FR37B  | The system shall expose `POST /api/payments/webhook` and reject requests with missing or invalid `x-razorpay-signature`. | P0 |
+| FR37C  | The deployed environment shall use aligned Razorpay mode credentials: test keys with test webhook secret, or live keys with live webhook secret. | P0 |
+| FR37D  | The payment order creation endpoint shall return actionable gateway error details (message/code) for operational debugging and support. | P1 |
+| FR37E  | The payment completion flow shall be idempotent so duplicate callbacks/webhooks do not duplicate completion side effects (status transitions, notifications, broadcasts). | P0 |
 
 ### 6.6 Ratings
 
