@@ -234,6 +234,12 @@ const calculateCommission = (amount: number) => {
   return { platformCommission, commissionRate, gstAmount, gstRate, providerPayout };
 };
 
+const buildRazorpayReceipt = (jobId: string): string => {
+  const compactJobId = jobId.replace(/-/g, '').slice(-12);
+  const timePart = Date.now().toString(36);
+  return `vxa_${compactJobId}_${timePart}`.slice(0, 40);
+};
+
 // ─── POST /api/payments/create-order ──────────────────────
 // Creates a REAL Razorpay order and returns the order ID + key to the frontend
 router.post('/create-order', authMiddleware, async (req: Request, res: Response) => {
@@ -284,7 +290,7 @@ router.post('/create-order', authMiddleware, async (req: Request, res: Response)
     const order = await razorpay.orders.create({
       amount: amountInPaise,
       currency: 'INR',
-      receipt: `vexa_${jobId}_${Date.now()}`,
+      receipt: buildRazorpayReceipt(jobId),
       notes: {
         jobId,
         customerId: req.user!.userId,
