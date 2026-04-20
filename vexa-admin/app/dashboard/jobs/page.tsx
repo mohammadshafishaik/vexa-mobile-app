@@ -14,19 +14,64 @@ interface JobRow {
   status: string;
   originalPrice: number;
   revisedPrice?: number | null;
-  customer?: { name: string; email: string } | null;
-  selectedProvider?: { name: string; email: string } | null;
+  cancellationReason?: string | null;
+  cancellationFee?: number | null;
+  customerPresenceStatus?: 'ONLINE' | 'OFFLINE';
+  providerPresenceStatus?: 'ONLINE' | 'OFFLINE';
+  customer?: {
+    name: string;
+    email: string;
+    accountStatus?: string;
+    availabilityStatus?: 'ONLINE' | 'OFFLINE' | 'BUSY';
+    presenceStatus?: 'ONLINE' | 'OFFLINE';
+  } | null;
+  selectedProvider?: {
+    name: string;
+    email: string;
+    accountStatus?: string;
+    availabilityStatus?: 'ONLINE' | 'OFFLINE' | 'BUSY';
+    presenceStatus?: 'ONLINE' | 'OFFLINE';
+  } | null;
+  latestCancellation?: {
+    id: string;
+    initiator: 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
+    reason: string;
+    cancellationFee: number;
+    feePaid: boolean;
+    createdAt: string;
+    cancelledBy?: {
+      name: string;
+      email: string;
+    } | null;
+  } | null;
   _count?: {
     bids?: number;
     modifications?: number;
     payments?: number;
     disputes?: number;
+    cancellations?: number;
   };
   createdAt: string;
 }
 
 interface JobsPayload {
   data: JobRow[];
+}
+
+function toneFromPresence(status?: 'ONLINE' | 'OFFLINE'): 'success' | 'default' {
+  return status === 'ONLINE' ? 'success' : 'default';
+}
+
+function toneFromAvailability(status?: 'ONLINE' | 'OFFLINE' | 'BUSY'): 'success' | 'warn' | 'default' {
+  if (status === 'ONLINE') return 'success';
+  if (status === 'BUSY') return 'warn';
+  return 'default';
+}
+
+function toneFromJobStatus(status: string): 'danger' | 'warn' | 'default' {
+  if (status === 'CANCELLED' || status === 'UNDER_DISPUTE') return 'danger';
+  if (status === 'PAYMENT_PENDING') return 'warn';
+  return 'default';
 }
 
 export default function JobsPage() {
@@ -82,7 +127,7 @@ export default function JobsPage() {
 
       <Card title="Job ledger" subtitle="Operational signals per request.">
         <DataTable
-          columns={['Order', 'Participants', 'Status', 'Price', 'Activity', 'Action']}
+          columns={['Order', 'Participants', 'Live Status', 'Status', 'Price', 'Activity', 'Action']}
           rows={jobs.map((job) => (
             <tr key={job.id} className="align-top">
               <td className="px-3 py-2">
@@ -92,19 +137,53 @@ export default function JobsPage() {
               </td>
               <td className="px-3 py-2 text-xs text-[var(--ink-700)]">
                 <p>Customer: {job.customer?.name || 'Unknown'}</p>
+                <p className="text-[var(--ink-dim)]">{job.customer?.accountStatus || 'UNKNOWN'}</p>
                 <p>Provider: {job.selectedProvider?.name || 'Unassigned'}</p>
+                {job.selectedProvider ? (
+                  <p className="text-[var(--ink-dim)]">{job.selectedProvider.accountStatus || 'UNKNOWN'}</p>
+                ) : null}
               </td>
               <td className="px-3 py-2">
-                <StatusChip text={job.status} tone={job.status === 'UNDER_DISPUTE' ? 'danger' : 'default'} />
+                <div className="space-y-1">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-[var(--ink-dim)]">Customer</p>
+                    <StatusChip
+                      text={job.customerPresenceStatus || job.customer?.presenceStatus || 'OFFLINE'}
+                      tone={toneFromPresence(job.customerPresenceStatus || job.customer?.presenceStatus)}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-[var(--ink-dim)]">Provider</p>
+                    <StatusChip
+                      text={job.selectedProvider?.availabilityStatus || 'OFFLINE'}
+                      tone={toneFromAvailability(job.selectedProvider?.availabilityStatus)}
+                    />
+                  </div>
+                </div>
+              </td>
+              <td className="px-3 py-2">
+                <StatusChip text={job.status} tone={toneFromJobStatus(job.status)} />
+                {job.latestCancellation || job.cancellationReason ? (
+                  <div className="mt-1 text-[11px] text-[var(--ink-dim)]">
+                    <p>
+                      Cancelled by {job.latestCancellation?.initiator || 'UNKNOWN'}
+                    </p>
+                    <p>{job.latestCancellation?.reason || job.cancellationReason}</p>
+                  </div>
+                ) : null}
               </td>
               <td className="px-3 py-2 text-xs text-[var(--ink-700)]">
                 <p>Base: ₹{Math.round(job.originalPrice).toLocaleString()}</p>
                 <p>Revised: ₹{Math.round(job.revisedPrice || job.originalPrice).toLocaleString()}</p>
+                {job.latestCancellation ? (
+                  <p>Cancel fee: ₹{Math.round(job.latestCancellation.cancellationFee || 0).toLocaleString()}</p>
+                ) : null}
               </td>
               <td className="px-3 py-2 text-xs text-[var(--ink-700)]">
                 <p>Bids: {job._count?.bids || 0}</p>
                 <p>Mods: {job._count?.modifications || 0}</p>
                 <p>Disputes: {job._count?.disputes || 0}</p>
+                <p>Cancellations: {job._count?.cancellations || 0}</p>
               </td>
               <td className="px-3 py-2">
                 <button

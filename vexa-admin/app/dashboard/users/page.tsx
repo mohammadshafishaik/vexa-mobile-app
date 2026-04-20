@@ -14,6 +14,8 @@ interface UserRow {
   role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
   adminRole?: 'SUPER_ADMIN' | 'MODERATOR' | null;
   accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
+  availabilityStatus?: 'ONLINE' | 'OFFLINE' | 'BUSY';
+  presenceStatus?: 'ONLINE' | 'OFFLINE';
   kycStatus: string;
   isVerified: boolean;
   createdAt: string;
@@ -32,6 +34,16 @@ function toneFromStatus(status: UserRow['accountStatus']): 'success' | 'warn' | 
   if (status === 'ACTIVE') return 'success';
   if (status === 'SUSPENDED') return 'warn';
   if (status === 'BANNED' || status === 'DELETED') return 'danger';
+  return 'default';
+}
+
+function toneFromPresence(status?: UserRow['presenceStatus']): 'success' | 'default' {
+  return status === 'ONLINE' ? 'success' : 'default';
+}
+
+function toneFromAvailability(status?: UserRow['availabilityStatus']): 'success' | 'warn' | 'default' {
+  if (status === 'ONLINE') return 'success';
+  if (status === 'BUSY') return 'warn';
   return 'default';
 }
 
@@ -98,7 +110,7 @@ export default function UsersPage() {
 
       <Card title="User ledger" subtitle="Moderation status and activity summary.">
         <DataTable
-          columns={['User', 'Role', 'Status', 'KYC', 'Activity', 'Actions']}
+          columns={['User', 'Role', 'Status', 'Presence', 'KYC', 'Activity', 'Actions']}
           rows={users.map((user) => (
             <tr key={user.id} className="align-top">
               <td className="px-3 py-2">
@@ -112,6 +124,23 @@ export default function UsersPage() {
               </td>
               <td className="px-3 py-2">
                 <StatusChip text={user.accountStatus} tone={toneFromStatus(user.accountStatus)} />
+              </td>
+              <td className="px-3 py-2">
+                <div className="space-y-1">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-[var(--ink-dim)]">Session</p>
+                    <StatusChip text={user.presenceStatus || 'OFFLINE'} tone={toneFromPresence(user.presenceStatus)} />
+                  </div>
+                  {user.role === 'PROVIDER' ? (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--ink-dim)]">Availability</p>
+                      <StatusChip
+                        text={user.availabilityStatus || 'OFFLINE'}
+                        tone={toneFromAvailability(user.availabilityStatus)}
+                      />
+                    </div>
+                  ) : null}
+                </div>
               </td>
               <td className="px-3 py-2">
                 <StatusChip text={user.kycStatus || 'PENDING'} tone={user.kycStatus === 'VERIFIED' ? 'success' : 'warn'} />

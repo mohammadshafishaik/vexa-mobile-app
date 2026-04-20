@@ -13,6 +13,29 @@ const parsePage = (value: unknown, fallback: number): number => {
   return Math.floor(parsed);
 };
 
+type SessionProbe = {
+  updatedAt: Date;
+  expiresAt: Date;
+};
+
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+const toPresenceStatus = (session?: SessionProbe | null): 'ONLINE' | 'OFFLINE' => {
+  if (!session) {
+    return 'OFFLINE';
+  }
+
+  const now = Date.now();
+  const expiresAt = session.expiresAt.getTime();
+  const lastTouchedAt = session.updatedAt.getTime();
+
+  if (expiresAt <= now) {
+    return 'OFFLINE';
+  }
+
+  return now - lastTouchedAt <= ONLINE_WINDOW_MS ? 'ONLINE' : 'OFFLINE';
+};
+
 router.get('/jobs', async (req: Request, res: Response) => {
   try {
     const { status, category, search, page = '1', limit = '20' } = req.query;
@@ -39,8 +62,55 @@ router.get('/jobs', async (req: Request, res: Response) => {
       prisma.serviceRequest.findMany({
         where,
         include: {
-          customer: { select: { id: true, name: true, email: true, phone: true } },
-          selectedProvider: { select: { id: true, name: true, email: true, phone: true } },
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              accountStatus: true,
+              availabilityStatus: true,
+              sessions: {
+                select: {
+                  updatedAt: true,
+                  expiresAt: true,
+                },
+                orderBy: { updatedAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          selectedProvider: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              accountStatus: true,
+              availabilityStatus: true,
+              sessions: {
+                select: {
+                  updatedAt: true,
+                  expiresAt: true,
+                },
+                orderBy: { updatedAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          cancellations: {
+            include: {
+              cancelledBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
           _count: {
             select: {
               bids: true,
@@ -48,6 +118,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
               payments: true,
               disputes: true,
               ratings: true,
+              cancellations: true,
             },
           },
         },
@@ -58,13 +129,51 @@ router.get('/jobs', async (req: Request, res: Response) => {
       prisma.serviceRequest.count({ where }),
     ]);
 
+    const jobsWithSignals = jobs.map((job) => {
+      const customerSession = job.customer?.sessions?.[0] || null;
+      const providerSession = job.selectedProvider?.sessions?.[0] || null;
+
+      const customer = job.customer
+        ? {
+            id: job.customer.id,
+            name: job.customer.name,
+            email: job.customer.email,
+            phone: job.customer.phone,
+            accountStatus: job.customer.accountStatus,
+            availabilityStatus: job.customer.availabilityStatus,
+            presenceStatus: toPresenceStatus(customerSession),
+          }
+        : null;
+
+      const selectedProvider = job.selectedProvider
+        ? {
+            id: job.selectedProvider.id,
+            name: job.selectedProvider.name,
+            email: job.selectedProvider.email,
+            phone: job.selectedProvider.phone,
+            accountStatus: job.selectedProvider.accountStatus,
+            availabilityStatus: job.selectedProvider.availabilityStatus,
+            presenceStatus: toPresenceStatus(providerSession),
+          }
+        : null;
+
+      return {
+        ...job,
+        customer,
+        selectedProvider,
+        customerPresenceStatus: customer?.presenceStatus || 'OFFLINE',
+        providerPresenceStatus: selectedProvider?.presenceStatus || 'OFFLINE',
+        latestCancellation: job.cancellations[0] || null,
+      };
+    });
+
     res.json({
       success: true,
-      data: jobs,
+      data: jobsWithSignals,
       total,
       page: currentPage,
       limit: currentLimit,
-      hasMore: skip + jobs.length < total,
+      hasMore: skip + jobsWithSignals.length < total,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -83,6 +192,15 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
             email: true,
             phone: true,
             accountStatus: true,
+            availabilityStatus: true,
+            sessions: {
+              select: {
+                updatedAt: true,
+                expiresAt: true,
+              },
+              orderBy: { updatedAt: 'desc' },
+              take: 1,
+            },
           },
         },
         selectedProvider: {
@@ -92,6 +210,15 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
             email: true,
             phone: true,
             accountStatus: true,
+            availabilityStatus: true,
+            sessions: {
+              select: {
+                updatedAt: true,
+                expiresAt: true,
+              },
+              orderBy: { updatedAt: 'desc' },
+              take: 1,
+            },
           },
         },
         bids: {
@@ -141,6 +268,19 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
           },
           orderBy: { createdAt: 'desc' },
         },
+        cancellations: {
+          include: {
+            cancelledBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                availabilityStatus: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
@@ -149,15 +289,56 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    const jobCancellations = (((job as any).cancellations || []) as Array<{
+      createdAt: Date;
+      [key: string]: unknown;
+    }>);
+
     const timeline = [
       { type: 'JOB_CREATED', createdAt: job.createdAt, payload: { status: job.status } },
       ...job.modifications.map((item) => ({ type: 'MODIFICATION', createdAt: item.createdAt, payload: item })),
       ...job.payments.map((item) => ({ type: 'PAYMENT', createdAt: item.createdAt, payload: item })),
       ...job.disputes.map((item) => ({ type: 'DISPUTE', createdAt: item.createdAt, payload: item })),
       ...job.ratings.map((item) => ({ type: 'RATING', createdAt: item.createdAt, payload: item })),
+      ...jobCancellations.map((item) => ({ type: 'CANCELLATION', createdAt: item.createdAt, payload: item })),
     ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-    res.json({ success: true, data: { ...job, timeline } });
+    const normalizedCustomer = job.customer
+      ? {
+          id: job.customer.id,
+          name: job.customer.name,
+          email: job.customer.email,
+          phone: job.customer.phone,
+          accountStatus: job.customer.accountStatus,
+          availabilityStatus: job.customer.availabilityStatus,
+          presenceStatus: toPresenceStatus(job.customer.sessions[0]),
+        }
+      : null;
+
+    const normalizedProvider = job.selectedProvider
+      ? {
+          id: job.selectedProvider.id,
+          name: job.selectedProvider.name,
+          email: job.selectedProvider.email,
+          phone: job.selectedProvider.phone,
+          accountStatus: job.selectedProvider.accountStatus,
+          availabilityStatus: job.selectedProvider.availabilityStatus,
+          presenceStatus: toPresenceStatus(job.selectedProvider.sessions[0]),
+        }
+      : null;
+
+    res.json({
+      success: true,
+      data: {
+        ...job,
+        customer: normalizedCustomer,
+        selectedProvider: normalizedProvider,
+        customerPresenceStatus: normalizedCustomer?.presenceStatus || 'OFFLINE',
+        providerPresenceStatus: normalizedProvider?.presenceStatus || 'OFFLINE',
+        latestCancellation: jobCancellations[0] || null,
+        timeline,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

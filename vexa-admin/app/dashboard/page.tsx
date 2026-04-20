@@ -21,6 +21,7 @@ const quickActions = [
   { href: '/dashboard/disputes', label: 'Resolve disputes queue' },
   { href: '/dashboard/bidding', label: 'Check bidding anomalies' },
   { href: '/dashboard/payments', label: 'Run payment integrity checks' },
+  { href: '/dashboard/recommendations', label: 'Tune AI recommendation engine' },
 ];
 
 export default function DashboardPage() {

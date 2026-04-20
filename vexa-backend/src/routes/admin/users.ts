@@ -16,6 +16,29 @@ const parsePage = (value: unknown, fallback: number): number => {
   return Math.floor(parsed);
 };
 
+type SessionProbe = {
+  updatedAt: Date;
+  expiresAt: Date;
+};
+
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+const toPresenceStatus = (session?: SessionProbe | null): 'ONLINE' | 'OFFLINE' => {
+  if (!session) {
+    return 'OFFLINE';
+  }
+
+  const now = Date.now();
+  const expiresAt = session.expiresAt.getTime();
+  const lastTouchedAt = session.updatedAt.getTime();
+
+  if (expiresAt <= now) {
+    return 'OFFLINE';
+  }
+
+  return now - lastTouchedAt <= ONLINE_WINDOW_MS ? 'ONLINE' : 'OFFLINE';
+};
+
 const formatAdminDateTime = (value: Date): string => {
   return new Intl.DateTimeFormat('en-IN', {
     dateStyle: 'medium',
@@ -208,10 +231,19 @@ router.get('/users', async (req: Request, res: Response) => {
           role: true,
           adminRole: true,
           accountStatus: true,
+          availabilityStatus: true,
           isVerified: true,
           kycStatus: true,
           createdAt: true,
           updatedAt: true,
+          sessions: {
+            select: {
+              updatedAt: true,
+              expiresAt: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+          },
           _count: {
             select: {
               serviceRequests: true,
@@ -227,13 +259,23 @@ router.get('/users', async (req: Request, res: Response) => {
       prisma.user.count({ where }),
     ]);
 
+    const usersWithPresence = items.map((item) => {
+      const latestSession = item.sessions[0] || null;
+      const { sessions, ...rest } = item;
+
+      return {
+        ...rest,
+        presenceStatus: toPresenceStatus(latestSession),
+      };
+    });
+
     res.json({
       success: true,
-      data: items,
+      data: usersWithPresence,
       total,
       page: currentPage,
       limit: currentLimit,
-      hasMore: skip + items.length < total,
+      hasMore: skip + usersWithPresence.length < total,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -301,6 +343,14 @@ router.get('/users/:id', async (req: Request, res: Response) => {
             job: { select: { id: true, orderId: true, title: true } },
           },
         },
+        sessions: {
+          select: {
+            updatedAt: true,
+            expiresAt: true,
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -309,7 +359,16 @@ router.get('/users/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data: user });
+    const latestSession = user.sessions[0] || null;
+    const { sessions, ...userWithoutSessions } = user;
+
+    res.json({
+      success: true,
+      data: {
+        ...userWithoutSessions,
+        presenceStatus: toPresenceStatus(latestSession),
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

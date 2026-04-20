@@ -1,3 +1,5 @@
+import { getAiRecommendationConfig } from './aiRecommendationConfig';
+
 type JobRecommendationInput = {
   title?: string;
   description?: string;
@@ -104,9 +106,11 @@ const buildChecklistFromDescription = (description: string): string[] => {
   return checklist.slice(0, 5);
 };
 
-export const recommendJobDescription = (
+export const recommendJobDescription = async (
   input: JobRecommendationInput,
-): JobRecommendationOutput => {
+): Promise<JobRecommendationOutput> => {
+  const config = await getAiRecommendationConfig();
+
   const title = normalizeText(input.title);
   const description = stripPreviousAiSummary(normalizeText(input.description));
   const category = normalizeCategory(input.category);
@@ -131,7 +135,7 @@ export const recommendJobDescription = (
   if (typeof budget === 'number' && budget < min) {
     warnings.push(`Entered budget is below recommended minimum for ${category} (Rs ${min}).`);
   }
-  if (description.length < 30) {
+  if (description.length < config.minJobDescriptionLength) {
     warnings.push('Description is short. Add issue details to reduce wrong bids and revisions.');
   }
 
@@ -148,7 +152,9 @@ export const recommendJobDescription = (
   };
 };
 
-export const recommendBid = (input: BidRecommendationInput): BidRecommendationOutput => {
+export const recommendBid = async (input: BidRecommendationInput): Promise<BidRecommendationOutput> => {
+  const config = await getAiRecommendationConfig();
+
   const category = normalizeCategory(input.jobCategory);
   const baseline = CATEGORY_BASELINE_BUDGET[category] || CATEGORY_BASELINE_BUDGET.other;
   const lowest = Number.isFinite(input.currentLowestBid)
@@ -160,7 +166,11 @@ export const recommendBid = (input: BidRecommendationInput): BidRecommendationOu
 
   let suggestedBidAmount: number | null = null;
   if (typeof lowest === 'number') {
-    suggestedBidAmount = roundCurrency(Math.max(baseline.min, lowest - Math.max(30, lowest * 0.03)));
+    const undercutBy = Math.max(
+      config.bidMinimumUndercut,
+      lowest * (config.bidUndercutPercent / 100),
+    );
+    suggestedBidAmount = roundCurrency(Math.max(baseline.min, lowest - undercutBy));
   } else if (typeof myBid === 'number') {
     suggestedBidAmount = roundCurrency(Math.max(baseline.min, myBid));
   } else {
@@ -181,7 +191,7 @@ export const recommendBid = (input: BidRecommendationInput): BidRecommendationOu
   }
 
   const message = normalizeText(input.message);
-  if (message.length < 25) {
+  if (message.length < config.minProposalLength) {
     score -= 12;
     riskFlags.push('Proposal message is too short and may reduce conversion.');
   }
@@ -199,12 +209,21 @@ export const recommendBid = (input: BidRecommendationInput): BidRecommendationOu
 
   score = clamp(score, 30, 98);
 
-  const suggestedMessage = [
+  const suggestedMessageParts = [
     `Hello, I can take up \"${normalizeText(input.jobTitle) || 'this job'}\".`,
-    `I have ${Math.max(1, experience || 1)}+ years experience in ${toSentenceCase(category)} work.`,
     `Estimated completion: ${estimatedDuration || 'as per site inspection and scope'}.`,
     'I will confirm final scope on arrival and keep material/labor transparent.',
-  ].join(' ');
+  ];
+
+  if (config.includeExperienceLineInBid) {
+    suggestedMessageParts.splice(
+      1,
+      0,
+      `I have ${Math.max(1, experience || 1)}+ years experience in ${toSentenceCase(category)} work.`,
+    );
+  }
+
+  const suggestedMessage = suggestedMessageParts.join(' ');
 
   const strategy =
     score >= 80
@@ -220,9 +239,11 @@ export const recommendBid = (input: BidRecommendationInput): BidRecommendationOu
   };
 };
 
-export const recommendChatReplies = (
+export const recommendChatReplies = async (
   input: ChatRecommendationInput,
-): ChatRecommendationOutput => {
+): Promise<ChatRecommendationOutput> => {
+  const config = await getAiRecommendationConfig();
+
   const latest = normalizeText(input.latestMessage).toLowerCase();
   const draft = normalizeText(input.draft);
   const role = String(input.userRole || '').toUpperCase();
@@ -281,9 +302,10 @@ export const recommendChatReplies = (
   }
 
   return {
-    quickReplies: quickReplies.slice(0, 3),
+    quickReplies: quickReplies.slice(0, config.chatSuggestionCount),
     tone,
-    safetyNote:
-      'Do not share OTPs, UPI PIN, or personal banking details in chat. Keep all communication in-app.',
+    safetyNote: config.requireSafetyNote
+      ? 'Do not share OTPs, UPI PIN, or personal banking details in chat. Keep all communication in-app.'
+      : 'Safety guidance is currently hidden by admin settings.',
   };
 };

@@ -6,6 +6,31 @@ import { createAndPushNotification } from '../utils/notificationHelper';
 
 const router = Router();
 
+const ensureProviderCanBid = async (userId: string): Promise<string | null> => {
+  const provider = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      role: true,
+      accountStatus: true,
+      availabilityStatus: true,
+    },
+  });
+
+  if (!provider || provider.role !== 'PROVIDER') {
+    return 'Only providers can place bids';
+  }
+
+  if (provider.accountStatus !== 'ACTIVE') {
+    return 'Your account is not active for bidding';
+  }
+
+  if (provider.availabilityStatus !== 'ONLINE') {
+    return 'Set your availability to ONLINE before placing or updating bids';
+  }
+
+  return null;
+};
+
 // ─── POST /api/bids — place a bid ────────────────────────
 router.post('/', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -14,6 +39,12 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 
     if (!jobId || Number.isNaN(numericAmount) || numericAmount <= 0 || !message || !estimatedDuration) {
       res.status(400).json({ success: false, message: 'Missing required fields' });
+      return;
+    }
+
+    const biddingEligibilityError = await ensureProviderCanBid(req.user!.userId);
+    if (biddingEligibilityError) {
+      res.status(403).json({ success: false, message: biddingEligibilityError });
       return;
     }
 
@@ -214,6 +245,12 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
     if (bid.isSelected) {
       res.status(400).json({ success: false, message: 'Cannot update an accepted bid' });
+      return;
+    }
+
+    const biddingEligibilityError = await ensureProviderCanBid(req.user!.userId);
+    if (biddingEligibilityError) {
+      res.status(403).json({ success: false, message: biddingEligibilityError });
       return;
     }
 

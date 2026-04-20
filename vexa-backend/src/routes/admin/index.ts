@@ -11,6 +11,7 @@ import ratingRoutes from './ratings';
 import notificationRoutes from './notifications';
 import analyticsRoutes from './analytics';
 import auditRoutes from './audit';
+import recommendationRoutes from './recommendations';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.use(disputeRoutes);
 router.use(ratingRoutes);
 router.use(notificationRoutes);
 router.use(analyticsRoutes);
+router.use(recommendationRoutes);
 router.use(auditRoutes);
 
 export default router;

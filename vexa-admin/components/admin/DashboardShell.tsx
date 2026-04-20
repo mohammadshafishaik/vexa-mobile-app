@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard/disputes', label: 'Disputes', short: 'DSP' },
   { href: '/dashboard/ratings', label: 'Ratings', short: 'RTG' },
   { href: '/dashboard/notifications', label: 'Notifications', short: 'NTF' },
+  { href: '/dashboard/recommendations', label: 'AI Recommendations', short: 'AI' },
   { href: '/dashboard/audit', label: 'Audit Logs', short: 'LOG' },
   { href: '/dashboard/admins', label: 'Admins', short: 'ADM' },
 ];

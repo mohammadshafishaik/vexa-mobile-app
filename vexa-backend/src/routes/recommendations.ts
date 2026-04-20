@@ -10,7 +10,7 @@ const router = Router();
 
 router.post('/job-description', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const data = recommendJobDescription({
+    const data = await recommendJobDescription({
       title: req.body?.title,
       description: req.body?.description,
       category: req.body?.category,
@@ -27,7 +27,7 @@ router.post('/job-description', authMiddleware, async (req: Request, res: Respon
 
 router.post('/bid', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const data = recommendBid({
+    const data = await recommendBid({
       jobTitle: req.body?.jobTitle,
       jobDescription: req.body?.jobDescription,
       jobCategory: req.body?.jobCategory,
@@ -46,7 +46,7 @@ router.post('/bid', authMiddleware, async (req: Request, res: Response) => {
 
 router.post('/chat', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const data = recommendChatReplies({
+    const data = await recommendChatReplies({
       latestMessage: req.body?.latestMessage,
       jobTitle: req.body?.jobTitle,
       draft: req.body?.draft,
