@@ -32,7 +32,8 @@ const GOOGLE_WEB_CLIENT_ID = '926413154225-gu6bf8poq2i3cf0p7usr522rpdhpkkgk.apps
 
 GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
-  offlineAccess: true,
+  // We only need an ID token for backend verification, not a server auth code.
+  offlineAccess: false,
 });
 
 const GoogleIcon: React.FC = () => (
@@ -207,7 +208,7 @@ const LoginScreen: React.FC = () => {
         setGeneralError('Google Play Services is not available or outdated on this device.');
       } else if (lowerMessage.includes('developer_error')) {
         setGeneralError(
-          'Google Sign-In is not configured for this app signature yet. Add debug/release SHA-1 and SHA-256 in Firebase, download updated google-services.json, and rebuild the APK.',
+          'Google Sign-In is not configured for this app signature yet. Uninstall any older app build, then add debug/release SHA-1 and SHA-256 in Firebase, download updated google-services.json, and rebuild the APK.',
         );
       } else if (error?.code === 'ERR_NETWORK' || (error?.isAxiosError && lowerMessage.includes('network error'))) {
         setGeneralError('Google account selected, but server is unreachable. Check backend URL and internet connection.');
