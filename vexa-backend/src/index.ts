@@ -18,7 +18,7 @@ import authRoutes from './routes/auth';
 import jobRoutes from './routes/jobs';
 import bidRoutes from './routes/bids';
 import modificationRoutes from './routes/modifications';
-import paymentRoutes from './routes/payments';
+import paymentRoutes, { razorpayWebhookHandler } from './routes/payments';
 import ratingRoutes from './routes/ratings';
 import notificationRoutes from './routes/notifications';
 import disputeRoutes from './routes/disputes';
@@ -130,6 +130,9 @@ app.use(cors({
 // ─── Better Auth Handler ───────────────────────────────
 // MUST be mounted BEFORE express.json() — Better Auth handles its own body parsing
 app.all('/api/auth/*splat', toNodeHandler(auth));
+
+// Razorpay webhook must read raw body for signature verification
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), razorpayWebhookHandler);
 
 // JSON body parsing for all other routes
 app.use(express.json());

@@ -8,6 +8,218 @@ import { getIO } from '../lib/socket';
 
 const router = Router();
 
+const safeSocketEmit = (eventName: string, payload: unknown) => {
+  try {
+    getIO().emit(eventName, payload);
+  } catch (e) {}
+};
+
+const getHeaderValue = (value: string | string[] | undefined): string | undefined => {
+  if (!value) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+};
+
+const verifyWebhookSignature = (rawBody: string, signature: string, secret: string): boolean => {
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  if (signature.length !== expected.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+};
+
+const getGatewayErrorMessage = (error: any, fallback: string): string => {
+  if (!error) return fallback;
+  return (
+    error?.error?.description
+    || error?.description
+    || error?.message
+    || error?.response?.data?.message
+    || fallback
+  );
+};
+
+const getGatewayErrorCode = (error: any): string | undefined => {
+  return error?.error?.code || error?.code;
+};
+
+export const razorpayWebhookHandler = async (req: Request, res: Response) => {
+  try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error('[Payments] webhook error: RAZORPAY_WEBHOOK_SECRET is not configured');
+      res.status(500).json({ success: false, message: 'Webhook secret is not configured' });
+      return;
+    }
+
+    const webhookSignature = getHeaderValue(req.headers['x-razorpay-signature']);
+    if (!webhookSignature) {
+      res.status(400).json({ success: false, message: 'Missing x-razorpay-signature header' });
+      return;
+    }
+
+    if (!Buffer.isBuffer(req.body)) {
+      res.status(400).json({ success: false, message: 'Invalid webhook payload format' });
+      return;
+    }
+
+    const rawBody = req.body.toString('utf8');
+    if (!verifyWebhookSignature(rawBody, webhookSignature, webhookSecret)) {
+      res.status(400).json({ success: false, message: 'Invalid webhook signature' });
+      return;
+    }
+
+    const payload = JSON.parse(rawBody) as any;
+    const event = payload?.event as string | undefined;
+    const paymentEntity = payload?.payload?.payment?.entity;
+    const orderEntity = payload?.payload?.order?.entity;
+
+    const razorpayOrderId = (paymentEntity?.order_id || orderEntity?.id) as string | undefined;
+    const razorpayPaymentId = paymentEntity?.id as string | undefined;
+
+    if (!event || !razorpayOrderId) {
+      console.warn('[Payments] webhook ignored due to missing event/order id');
+      res.status(200).json({ success: true, message: 'Webhook ignored' });
+      return;
+    }
+
+    const paymentRecord = await prisma.payment.findFirst({
+      where: {
+        OR: [
+          { razorpayOrderId },
+          ...(razorpayPaymentId ? [{ razorpayPaymentId }] : []),
+        ],
+      },
+      include: {
+        job: {
+          select: {
+            id: true,
+            title: true,
+            customerId: true,
+            selectedProviderId: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!paymentRecord) {
+      console.warn('[Payments] webhook payment not found for order:', razorpayOrderId);
+      res.status(200).json({ success: true, message: 'No matching payment found' });
+      return;
+    }
+
+    const isSuccessEvent = event === 'payment.captured' || event === 'order.paid';
+    const isFailureEvent = event === 'payment.failed';
+
+    if (isSuccessEvent) {
+      const transitionResult = await prisma.$transaction(async (tx) => {
+        const updated = await tx.payment.updateMany({
+          where: {
+            id: paymentRecord.id,
+            status: { not: 'COMPLETED' },
+          },
+          data: {
+            status: 'COMPLETED',
+            razorpayPaymentId: razorpayPaymentId || paymentRecord.razorpayPaymentId,
+            razorpaySignature: webhookSignature,
+          },
+        });
+
+        if (updated.count > 0) {
+          await tx.serviceRequest.update({
+            where: { id: paymentRecord.jobId },
+            data: { status: 'PAID' },
+          });
+        }
+
+        return updated.count;
+      });
+
+      if (transitionResult > 0) {
+        const latestPayment = await prisma.payment.findUnique({ where: { id: paymentRecord.id } });
+
+        if (paymentRecord.payeeId) {
+          await createAndPushNotification({
+            userId: paymentRecord.payeeId,
+            type: 'PAYMENT_RECEIVED',
+            title: 'Payment Received! 💰',
+            body: `You received ₹${paymentRecord.amount} for "${paymentRecord.job.title}"`,
+            data: { jobId: paymentRecord.jobId, paymentId: paymentRecord.id },
+          });
+        }
+
+        await createAndPushNotification({
+          userId: paymentRecord.payerId,
+          type: 'PAYMENT_COMPLETED',
+          title: 'Payment Successful ✅',
+          body: `Your payment of ₹${paymentRecord.amount} for "${paymentRecord.job.title}" is confirmed`,
+          data: { jobId: paymentRecord.jobId, paymentId: paymentRecord.id },
+        });
+
+        safeSocketEmit('payment:completed', { jobId: paymentRecord.jobId, payment: latestPayment });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: transitionResult > 0 ? 'Payment marked as completed' : 'Payment already completed',
+      });
+      return;
+    }
+
+    if (isFailureEvent) {
+      const updateResult = await prisma.payment.updateMany({
+        where: {
+          id: paymentRecord.id,
+          status: { not: 'COMPLETED' },
+        },
+        data: {
+          status: 'FAILED',
+          razorpayPaymentId: razorpayPaymentId || paymentRecord.razorpayPaymentId,
+          razorpaySignature: webhookSignature,
+        },
+      });
+
+      if (updateResult.count > 0) {
+        await createAndPushNotification({
+          userId: paymentRecord.payerId,
+          type: 'SYSTEM',
+          title: 'Payment Failed',
+          body: `Payment attempt for "${paymentRecord.job.title}" failed. Please retry.`,
+          data: { jobId: paymentRecord.jobId, paymentId: paymentRecord.id },
+        });
+
+        if (paymentRecord.payeeId) {
+          await createAndPushNotification({
+            userId: paymentRecord.payeeId,
+            type: 'SYSTEM',
+            title: 'Customer Payment Failed',
+            body: `Customer payment for "${paymentRecord.job.title}" failed and is pending retry.`,
+            data: { jobId: paymentRecord.jobId, paymentId: paymentRecord.id },
+          });
+        }
+
+        safeSocketEmit('payment:failed', {
+          jobId: paymentRecord.jobId,
+          paymentId: paymentRecord.id,
+          razorpayOrderId,
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: updateResult.count > 0 ? 'Payment marked as failed' : 'Payment already settled',
+      });
+      return;
+    }
+
+    res.status(200).json({ success: true, message: `Ignored event: ${event}` });
+  } catch (error: any) {
+    console.error('[Payments] webhook error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Commission & Tax configuration
 const getCommissionConfig = () => ({
   commissionRate: Number(process.env.PLATFORM_COMMISSION_RATE) || 0.10,
@@ -135,8 +347,23 @@ router.post('/create-order', authMiddleware, async (req: Request, res: Response)
       },
     });
   } catch (error: any) {
-    console.error('[Payments] create-order error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    const message = getGatewayErrorMessage(error, 'Failed to create payment order. Please try again.');
+    const code = getGatewayErrorCode(error);
+    const statusCode = Number(error?.statusCode);
+
+    console.error('[Payments] create-order error:', {
+      message,
+      code,
+      statusCode: Number.isFinite(statusCode) ? statusCode : undefined,
+      raw: error,
+    });
+
+    res.status(500).json({
+      success: false,
+      message,
+      ...(code ? { code } : {}),
+      ...(Number.isFinite(statusCode) ? { gatewayStatusCode: statusCode } : {}),
+    });
   }
 });
 
@@ -169,8 +396,11 @@ router.post('/verify', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // ─── Signature matches — payment is LEGITIMATE ───
-    const payment = await prisma.payment.updateMany({
-      where: { razorpayOrderId },
+    const transitionResult = await prisma.payment.updateMany({
+      where: {
+        razorpayOrderId,
+        status: { not: 'COMPLETED' },
+      },
       data: {
         razorpayPaymentId,
         razorpaySignature,
@@ -178,45 +408,54 @@ router.post('/verify', authMiddleware, async (req: Request, res: Response) => {
       },
     });
 
-    // Update job status to PAID
-    const job = await prisma.serviceRequest.update({
-      where: { id: jobId },
-      data: { status: 'PAID' },
-      include: { selectedProvider: true, customer: true },
-    });
-
     // Get the payment record for the response
     const paymentRecord = await prisma.payment.findFirst({
       where: { razorpayOrderId },
     });
 
-    // ─── Real-time notifications ───
-    // Notify provider that payment was received
-    if (job.selectedProviderId) {
-      await createAndPushNotification({
-        userId: job.selectedProviderId,
-        type: 'PAYMENT_RECEIVED',
-        title: 'Payment Received! 💰',
-        body: `You received ₹${paymentRecord?.amount} for "${job.title}"`,
-        data: { jobId, paymentId: paymentRecord?.id },
-      });
+    if (!paymentRecord) {
+      res.status(404).json({ success: false, message: 'Payment record not found' });
+      return;
     }
 
-    // Notify customer that payment was successful
-    await createAndPushNotification({
-      userId: job.customerId,
-      type: 'PAYMENT_COMPLETED',
-      title: 'Payment Successful ✅',
-      body: `Your payment of ₹${paymentRecord?.amount} for "${job.title}" is confirmed`,
-      data: { jobId, paymentId: paymentRecord?.id },
+    if (transitionResult.count > 0) {
+      // Update job status to PAID only on first successful transition
+      const job = await prisma.serviceRequest.update({
+        where: { id: jobId },
+        data: { status: 'PAID' },
+        include: { selectedProvider: true, customer: true },
+      });
+
+      // ─── Real-time notifications ───
+      // Notify provider that payment was received
+      if (job.selectedProviderId) {
+        await createAndPushNotification({
+          userId: job.selectedProviderId,
+          type: 'PAYMENT_RECEIVED',
+          title: 'Payment Received! 💰',
+          body: `You received ₹${paymentRecord.amount} for "${job.title}"`,
+          data: { jobId, paymentId: paymentRecord.id },
+        });
+      }
+
+      // Notify customer that payment was successful
+      await createAndPushNotification({
+        userId: job.customerId,
+        type: 'PAYMENT_COMPLETED',
+        title: 'Payment Successful ✅',
+        body: `Your payment of ₹${paymentRecord.amount} for "${job.title}" is confirmed`,
+        data: { jobId, paymentId: paymentRecord.id },
+      });
+
+      // Broadcast payment event
+      safeSocketEmit('payment:completed', { jobId, payment: paymentRecord });
+    }
+
+    res.json({
+      success: true,
+      data: paymentRecord,
+      message: transitionResult.count > 0 ? 'Payment verified successfully' : 'Payment already verified',
     });
-
-    // Broadcast payment event
-    try {
-      getIO().emit('payment:completed', { jobId, payment: paymentRecord });
-    } catch (e) {}
-
-    res.json({ success: true, data: paymentRecord });
   } catch (error: any) {
     console.error('[Payments] verify error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -376,7 +615,7 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
       data: { jobId, paymentId: payment.id },
     });
 
-    try { getIO().emit('payment:pending', { jobId, payment }); } catch (e) {}
+    safeSocketEmit('payment:pending', { jobId, payment });
 
     res.status(201).json({ success: true, data: payment });
   } catch (error: any) {
@@ -461,9 +700,7 @@ router.post('/cash/confirm', authMiddleware, async (req: Request, res: Response)
       data: { jobId, paymentId: result.updatedPayment.id },
     });
 
-    try {
-      getIO().emit('payment:completed', { jobId, payment: result.updatedPayment, job: result.updatedJob });
-    } catch (e) {}
+    safeSocketEmit('payment:completed', { jobId, payment: result.updatedPayment, job: result.updatedJob });
 
     res.json({
       success: true,
