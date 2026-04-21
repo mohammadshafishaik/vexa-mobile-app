@@ -165,23 +165,34 @@ const LoginScreen: React.FC = () => {
           const tokenResponse = await GoogleSignin.getTokens();
           idToken = tokenResponse.idToken || null;
         } catch {
-          // Fallback failed; validation below will show a clear error.
+          // Some Google Play Services/device combos fail token fetch; backend flow can still proceed with email + googleId.
         }
       }
 
-      if (!idToken || !googleEmail || !googleId) {
-        throw new Error('Google account data is incomplete. Please reconfigure Google Sign-In and try again.');
+      if (!googleEmail || !googleId) {
+        throw new Error('Google account data is incomplete. Please try again.');
       }
 
       await warmupBackend();
 
-      const response = await api.post('/custom-auth/google', {
-        idToken,
+      const payload: {
+        idToken?: string;
+        email: string;
+        name?: string;
+        photoUrl?: string;
+        googleId: string;
+      } = {
         email: googleEmail,
-        name,
-        photoUrl,
+        name: name || undefined,
+        photoUrl: photoUrl || undefined,
         googleId,
-      });
+      };
+
+      if (idToken) {
+        payload.idToken = idToken;
+      }
+
+      const response = await api.post('/custom-auth/google', payload);
 
       if (response.data.success) {
         const { user, tokens } = response.data.data;
