@@ -220,10 +220,21 @@ h1 {
   border-color: var(--line);
 }
 
+.fallback-link {
+  background: rgba(11, 31, 54, 0.82);
+}
+
 .status {
   margin: 14px 0 0;
   font-size: 14px;
   color: var(--mint);
+}
+
+.install-hint {
+  margin: 8px 0 0;
+  color: var(--ink-dim);
+  max-width: 58ch;
+  line-height: 1.5;
 }
 
 .hero-panel {

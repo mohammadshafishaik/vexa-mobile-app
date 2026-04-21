@@ -41,12 +41,18 @@
 
         <div class="cta-row">
           <a id="downloadBtn" class="btn btn-primary magnetic" href="#" aria-disabled="true">Loading latest APK...</a>
+          <a id="directDownloadLink" class="btn btn-ghost magnetic fallback-link" href="#" target="_blank" rel="noopener noreferrer" hidden>
+            Direct APK Link
+          </a>
           <a class="btn btn-ghost magnetic" href="https://github.com/mohammadshafishaik/vexa-mobile-app/releases" target="_blank" rel="noopener noreferrer">
             View Changelog
           </a>
         </div>
 
         <p id="statusLine" class="status">Fetching latest release metadata...</p>
+        <p id="installHint" class="mini-note install-hint">
+          If download completes but install fails, uninstall old VEXA and install the file ending in .apk (not .apkm).
+        </p>
       </div>
 
       <aside class="hero-panel tilt">
@@ -68,7 +74,7 @@
           <li>Tap Download and wait for APK to finish.</li>
           <li>Open file from Downloads.</li>
           <li>Allow install from unknown source if prompted.</li>
-          <li>Launch VEXA and sign in.</li>
+          <li>If install is blocked, uninstall older VEXA build and retry.</li>
         </ol>
       </article>
 

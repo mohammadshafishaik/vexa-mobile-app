@@ -3,7 +3,9 @@ const LATEST_RELEASE_API = `https://api.github.com/repos/${REPO}/releases/latest
 
 const el = {
   downloadBtn: document.getElementById("downloadBtn"),
+  directDownloadLink: document.getElementById("directDownloadLink"),
   statusLine: document.getElementById("statusLine"),
+  installHint: document.getElementById("installHint"),
   releaseTag: document.getElementById("releaseTag"),
   releaseDate: document.getElementById("releaseDate"),
   assetName: document.getElementById("assetName"),
@@ -36,6 +38,12 @@ const formatDate = (value) => {
   });
 };
 
+const buildStableAssetUrl = (tag, assetName) => {
+  const safeTag = encodeURIComponent(String(tag || "").trim());
+  const safeAssetName = encodeURIComponent(String(assetName || "").trim());
+  return `https://github.com/${REPO}/releases/download/${safeTag}/${safeAssetName}`;
+};
+
 async function loadRelease() {
   try {
     const response = await fetch(LATEST_RELEASE_API, {
@@ -63,6 +71,7 @@ async function loadRelease() {
       el.assetSize.textContent = "-";
       el.statusLine.textContent = "Latest release found, but no APK asset was attached.";
       el.statusLine.style.color = "#ffb257";
+      if (el.directDownloadLink) el.directDownloadLink.hidden = true;
       el.downloadBtn.textContent = "APK not available";
       el.downloadBtn.setAttribute("aria-disabled", "true");
       return;
@@ -71,11 +80,27 @@ async function loadRelease() {
     el.assetName.textContent = apk.name;
     el.assetSize.textContent = formatBytes(apk.size);
 
-    el.downloadBtn.href = apk.browser_download_url;
+    const stableApkUrl = buildStableAssetUrl(release.tag_name, apk.name);
+
+    el.downloadBtn.href = stableApkUrl;
+    el.downloadBtn.target = "_blank";
+    el.downloadBtn.rel = "noopener noreferrer";
+    el.downloadBtn.setAttribute("download", apk.name);
     el.downloadBtn.textContent = `Download ${apk.name}`;
     el.downloadBtn.setAttribute("aria-disabled", "false");
 
-    el.statusLine.textContent = "Latest APK is ready to download.";
+    if (el.directDownloadLink) {
+      el.directDownloadLink.href = stableApkUrl;
+      el.directDownloadLink.textContent = "Direct APK Link";
+      el.directDownloadLink.hidden = false;
+    }
+
+    if (el.installHint) {
+      el.installHint.textContent =
+        "If install fails after download, uninstall older VEXA and install this .apk from Files > Downloads.";
+    }
+
+    el.statusLine.textContent = "Latest APK is ready. If install fails, remove old VEXA and retry.";
     el.statusLine.style.color = "#47d4ad";
   } catch (error) {
     console.error(error);
@@ -83,6 +108,7 @@ async function loadRelease() {
     el.statusLine.style.color = "#ff7b8f";
     el.releaseNotes.textContent = "Could not fetch release notes from GitHub API.";
     el.assetSha.textContent = "Unavailable";
+    if (el.directDownloadLink) el.directDownloadLink.hidden = true;
   }
 }
 
