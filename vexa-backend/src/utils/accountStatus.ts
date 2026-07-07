@@ -1,12 +1,12 @@
 export type AccountStatusSnapshot = {
-  accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
+  accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DEACTIVATED' | 'DELETED';
   suspendedUntil?: Date | null;
   banReason?: string | null;
 };
 
 export type AccountAccessBlock = {
   statusCode: 403;
-  code: 'ACCOUNT_BANNED' | 'ACCOUNT_SUSPENDED' | 'ACCOUNT_DELETED';
+  code: 'ACCOUNT_BANNED' | 'ACCOUNT_SUSPENDED' | 'ACCOUNT_DEACTIVATED' | 'ACCOUNT_DELETED';
   message: string;
 };
 
@@ -45,6 +45,14 @@ export const getAccountAccessBlock = (
       statusCode: 403,
       code: 'ACCOUNT_BANNED',
       message: `Your account has been banned.${reasonText}`,
+    };
+  }
+
+  if (account.accountStatus === 'DEACTIVATED') {
+    return {
+      statusCode: 403,
+      code: 'ACCOUNT_DEACTIVATED',
+      message: 'Your account has been deactivated. Please contact support to reactivate.',
     };
   }
 

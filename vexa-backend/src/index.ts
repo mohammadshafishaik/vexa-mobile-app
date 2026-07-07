@@ -1,7 +1,9 @@
 import dotenv from 'dotenv';
 dotenv.config();
+console.log("==> Starting Backend (dotenv loaded)");
 
 import express from 'express';
+console.log("==> Express imported");
 import cors from 'cors';
 import helmet from 'helmet';
 import http from 'http';
@@ -11,7 +13,10 @@ import { auth } from './lib/auth';
 import { verifyEmailTransport } from './lib/email';
 import { setIO } from './lib/socket';
 import prisma from './lib/prisma';
+console.log("==> Prisma imported");
 import { upsertSuperAdmin } from './utils/admin/superAdmin';
+import { startAnalytics } from './lib/analytics';
+import { generalLimiter } from './lib/rateLimiter';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -32,6 +37,8 @@ import portfolioRoutes from './routes/portfolio';
 import locationRoutes from './routes/location';
 import availabilityRoutes from './routes/availability';
 import recommendationRoutes from './routes/recommendations';
+import pricingRoutes from './routes/pricing';
+import voiceBookingRoutes from './routes/voiceBooking';
 
 
 const app = express();
@@ -137,6 +144,9 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), raz
 // JSON body parsing for all other routes
 app.use(express.json());
 
+// Global rate limiter (100 req/min per IP)
+app.use(generalLimiter);
+
 // Serve static files for uploads
 app.use('/uploads', express.static('uploads'));
 
@@ -184,6 +194,8 @@ app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/pricing', pricingRoutes);
+app.use('/api/voice-booking', voiceBookingRoutes);
 
 // Socket.io connection
 io.on('connection', (socket) => {
@@ -222,8 +234,17 @@ io.on('connection', (socket) => {
   // Location updates (provider sends periodic GPS)
   socket.on('location:update', async (data: { jobId: string; latitude: number; longitude: number }) => {
     try {
+      const job = await prisma.serviceRequest.findUnique({
+        where: { id: data.jobId },
+        select: { customerId: true },
+      });
+
+      if (!job?.customerId) {
+        return;
+      }
+
       // Broadcast to the customer watching this job
-      socket.to(`user:${data.jobId}`).emit('location:provider', {
+      socket.to(`user:${job.customerId}`).emit('location:provider', {
         jobId: data.jobId,
         latitude: data.latitude,
         longitude: data.longitude,
@@ -251,6 +272,7 @@ server.listen(PORT, () => {
   console.log(`🔐 CORS mode: ${allowAllCorsOrigins ? 'allow-all' : allowedOrigins.join(', ')}`);
   console.log(`📊 Health check: ${PUBLIC_URL}/api/health\n`);
   verifyEmailTransport().catch(() => {});
+  startAnalytics();
   bootstrapAdminFromEnv().catch((error: any) => {
     console.error('❌ Admin bootstrap failed:', error?.message || error);
   });

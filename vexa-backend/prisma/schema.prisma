@@ -1,5 +1,7 @@
-// Prisma Schema for VEXA — Real-time Service Marketplace
-// Mirrors frontend types/index.ts exactly
+// ═══════════════════════════════════════════════════════════════════════════════
+// VEXA 2.0 — Production Prisma Schema
+// Real-time Service Marketplace · PostgreSQL + Prisma ORM
+// ═══════════════════════════════════════════════════════════════════════════════
 
 generator client {
   provider        = "prisma-client-js"
@@ -10,7 +12,9 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─── Enums ────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
 
 enum UserRole {
   CUSTOMER
@@ -21,65 +25,19 @@ enum UserRole {
 enum AdminRole {
   SUPER_ADMIN
   MODERATOR
+  SUPPORT_AGENT
 }
 
 enum AccountStatus {
   ACTIVE
   SUSPENDED
   BANNED
+  DEACTIVATED
   DELETED
 }
 
-enum KycDocumentType {
-  AADHAAR
-  PAN
-  OTHER
-}
-
-enum KycDocumentStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-enum BidAnomalyStatus {
-  OPEN
-  REVIEWED
-  RESOLVED
-}
-
-enum BidAnomalyType {
-  RAPID_REBID
-  EXTREME_UNDERCUT
-  COLLUSION_PATTERN
-  OTHER
-}
-
-enum DisputeDecision {
-  REFUND
-  PARTIAL_SETTLEMENT
-  REJECT
-}
-
-enum CancellationInitiator {
-  CUSTOMER
-  PROVIDER
-  ADMIN
-}
-
-enum ProviderAvailabilityStatus {
-  ONLINE
-  OFFLINE
-  BUSY
-}
-
-enum MessageType {
-  TEXT
-  IMAGE
-  SYSTEM
-}
-
 enum JobStatus {
+  DRAFT
   POSTED
   BIDDING
   ACCEPTED
@@ -91,6 +49,15 @@ enum JobStatus {
   PAID
   UNDER_DISPUTE
   CANCELLED
+  EXPIRED
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
 }
 
 enum ApprovalStatus {
@@ -99,115 +66,396 @@ enum ApprovalStatus {
   REJECTED
 }
 
-enum DisputeStatus {
-  OPEN
-  UNDER_REVIEW
-  RESOLVED
-  ESCALATED
-}
-
 enum PaymentStatus {
   PENDING
   PROCESSING
+  CAPTURED
   COMPLETED
   FAILED
   REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum EscrowStatus {
+  PENDING
+  HELD
+  RELEASED
+  PARTIALLY_RELEASED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  DISPUTED
+  CANCELLED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  AWAITING_RESPONSE
+  RESOLVED
+  ESCALATED
+  CLOSED
+}
+
+enum DisputeDecision {
+  FULL_REFUND
+  PARTIAL_REFUND
+  RELEASE_TO_PROVIDER
+  SPLIT
+  REJECT
+}
+
+enum KycDocumentType {
+  AADHAAR
+  PAN
+  DRIVING_LICENSE
+  PASSPORT
+  TRADE_LICENSE
+  GST_CERTIFICATE
+  OTHER
+}
+
+enum KycDocumentStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ProviderAvailabilityStatus {
+  ONLINE
+  OFFLINE
+  BUSY
+  ON_JOB
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  AUDIO
+  SYSTEM
+  LOCATION
 }
 
 enum NotificationType {
   BID_RECEIVED
   BID_ACCEPTED
+  BID_REJECTED
   JOB_UPDATE
+  JOB_POSTED
   MODIFICATION_REQUEST
   MODIFICATION_APPROVED
   MODIFICATION_REJECTED
   PAYMENT_RECEIVED
   PAYMENT_COMPLETED
+  ESCROW_HELD
+  ESCROW_RELEASED
   DISPUTE_OPENED
+  DISPUTE_UPDATE
   DISPUTE_RESOLVED
   RATING_RECEIVED
+  RATING_REMINDER
+  PROVIDER_SELECTED
   SYSTEM
   CANCELLATION
   NEW_MESSAGE
   LOCATION_UPDATE
+  KYC_UPDATE
+  SUPPORT_TICKET
 }
 
-// ─── Models ───────────────────────────────────
+enum CancellationInitiator {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+  SYSTEM
+}
+
+enum BidAnomalyType {
+  RAPID_REBID
+  EXTREME_UNDERCUT
+  COLLUSION_PATTERN
+  PRICE_MANIPULATION
+  SHILL_BIDDING
+  OTHER
+}
+
+enum BidAnomalyStatus {
+  OPEN
+  REVIEWED
+  CONFIRMED
+  DISMISSED
+}
+
+enum VoiceBookingStatus {
+  UPLOADING
+  PROCESSING
+  TRANSCRIBED
+  JOB_CREATED
+  FAILED
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  AWAITING_USER
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum AnalyticsEventType {
+  PAGE_VIEW
+  SCREEN_VIEW
+  JOB_CREATED
+  JOB_VIEWED
+  JOB_SEARCH
+  BID_PLACED
+  BID_ACCEPTED
+  BID_REJECTED
+  PAYMENT_INITIATED
+  PAYMENT_COMPLETED
+  PAYMENT_FAILED
+  ESCROW_HELD
+  ESCROW_RELEASED
+  DISPUTE_OPENED
+  DISPUTE_RESOLVED
+  RATING_SUBMITTED
+  CHAT_STARTED
+  CHAT_MESSAGE_SENT
+  PROVIDER_SEARCH
+  PROVIDER_PROFILE_VIEWED
+  VOICE_BOOKING_STARTED
+  AI_MATCH_REQUESTED
+  LOGIN
+  SIGNUP
+  LOGOUT
+  APP_OPEN
+  APP_BACKGROUND
+  NOTIFICATION_RECEIVED
+  NOTIFICATION_CLICKED
+  ERROR
+  CUSTOM
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH & USER MODELS
+// ─────────────────────────────────────────────────────────────────────────────
 
 model User {
-  id         String   @id @default(uuid())
-  email      String   @unique
-  name       String
-  password   String?
-  googleId   String?  @unique
-  avatarUrl  String?
-  phone      String?
-  role       UserRole @default(CUSTOMER)
-  adminRole  AdminRole?
+  id            String        @id @default(uuid())
+  email         String        @unique
+  name          String
+  password      String?
+  googleId      String?       @unique
+  avatarUrl     String?
+  phone         String?       @unique
+  phoneVerified Boolean       @default(false)
+  role          UserRole      @default(CUSTOMER)
   accountStatus AccountStatus @default(ACTIVE)
-  suspendedUntil DateTime?
-  banReason  String?
-  bannedAt   DateTime?
-  bannedById String?
-  bannedBy   User?    @relation("UserBanActor", fields: [bannedById], references: [id])
-  bannedUsers User[]  @relation("UserBanActor")
-  isVerified Boolean  @default(false)
-  
-  // KYC & Verification
-  kycDocuments String[] @default([])
-  kycStatus    String   @default("PENDING") // PENDING, VERIFIED, REJECTED
-  
-  // Push Notifications
-  deviceTokens String[] @default([])
+  isVerified    Boolean       @default(false)
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
 
-  // Provider Profile Extensions
-  bio                   String?
-  availabilityStatus    ProviderAvailabilityStatus @default(OFFLINE)
-  lastLocationLat       Float?
-  lastLocationLng       Float?
-  lastLocationUpdatedAt DateTime?
-  
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  // Soft delete
+  deletedAt DateTime?
 
-  // Relations
-  serviceRequests     ServiceRequest[]     @relation("CustomerJobs")
-  selectedForJobs     ServiceRequest[]     @relation("SelectedProvider")
-  bids                Bid[]
-  modifications       JobModification[]
-  paymentsMade        Payment[]            @relation("Payer")
-  paymentsReceived    Payment[]            @relation("Payee")
-  ratingsGiven        Rating[]             @relation("Rater")
-  ratingsReceived     Rating[]             @relation("Ratee")
-  disputesRaised      Dispute[]            @relation("DisputeRaiser")
-  disputesResolved    Dispute[]            @relation("DisputeResolver")
-  notifications       Notification[]
-  auditLogs           AuditLog[]
-  kycDocumentsUploaded KycDocument[] @relation("UserKycDocuments")
-  kycDocumentsReviewed KycDocument[] @relation("KycReviewedBy")
-  kycReviewLogs       KycReviewLog[] @relation("KycReviewActor")
-  bidAnomaliesFlagged BidAnomaly[] @relation("BidAnomalyProvider")
-  bidAnomaliesReviewed BidAnomaly[] @relation("BidAnomalyReviewer")
-  disputeResolutions  DisputeResolution[] @relation("DisputeResolvedBy")
-  paymentActionLogs   PaymentActionLog[] @relation("PaymentActionActor")
-  notificationCampaigns NotificationCampaign[] @relation("NotificationCampaignActor")
-  adminSessions       AdminSession[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Profile Relations (1:1) ──
+  customerProfile CustomerProfile?
+  providerProfile ProviderProfile?
+  adminProfile    AdminProfile?
+
+  // ── Auth Relations ──
+  emailVerifications EmailVerification[]
   passwordResetTokens PasswordResetToken[]
+  captchaVerifications CaptchaVerification[]
 
-  // New feature relations
-  sentMessages        ChatMessage[]        @relation("MessageSender")
-  receivedMessages    ChatMessage[]        @relation("MessageReceiver")
-  skills              ProviderSkill[]      @relation("ProviderSkills")
-  cancellations       Cancellation[]       @relation("CancellationActor")
-  portfolioItems      PortfolioItem[]      @relation("ProviderPortfolio")
-  availabilitySlots   ProviderAvailability[] @relation("ProviderAvailability")
-
-  emailVerified Boolean   @default(false)
-  image         String?
+  // ── Better-auth managed ──
+  emailVerified Boolean  @default(false) @map("ba_email_verified")
+  image         String?  @map("ba_image")
   sessions      Session[]
   accounts      Account[]
 
+  // ── Job Relations ──
+  serviceRequests     ServiceRequest[] @relation("CustomerJobs")
+  selectedForJobs     ServiceRequest[] @relation("SelectedProvider")
+  bids                Bid[]
+  modifications       JobModification[]
+
+  // ── Payment Relations ──
+  paymentsMade     Payment[]           @relation("Payer")
+  paymentsReceived Payment[]           @relation("Payee")
+  escrowsAsCustomer EscrowTransaction[] @relation("EscrowCustomer")
+  escrowsAsProvider EscrowTransaction[] @relation("EscrowProvider")
+
+  // ── Trust & Safety Relations ──
+  ratingsGiven     Rating[]  @relation("Rater")
+  ratingsReceived  Rating[]  @relation("Ratee")
+  reviewsAuthored  Review[]  @relation("ReviewAuthor")
+  reviewsReceived  Review[]  @relation("ReviewSubject")
+  disputesRaised   Dispute[] @relation("DisputeRaiser")
+  disputesResolved Dispute[] @relation("DisputeResolver")
+  supportTicketsCreated SupportTicket[] @relation("TicketCreator")
+  supportTicketsAssigned SupportTicket[] @relation("TicketAssignee")
+  kycVerifications KYCVerification[]   @relation("UserKycVerifications")
+  kycReviewLogs    KYCReviewLog[]      @relation("KycReviewActor")
+  auditLogs        AuditLog[]
+
+  // ── Provider Data Relations ──
+  skills              ProviderSkill[]
+  documents           ProviderDocument[]
+  availabilitySlots   ProviderAvailability[]
+  locationHistory     LocationTracking[]
+  portfolioItems      PortfolioItem[]
+
+  // ── AI Feature Relations ──
+  voiceBookings        VoiceBooking[]
+  aiJobGenerations     AIJobGenerationHistory[]
+  aiMatchesAsProvider  AIMatchingHistory[] @relation("MatchedProvider")
+  aiMatchesAsCustomer  AIMatchingHistory[] @relation("MatchCustomer")
+  dynamicPricingHistory DynamicPricingHistory[]
+
+  // ── Comms Relations ──
+  chatRoomMemberships ChatRoomMember[]
+  sentMessages        ChatMessage[]        @relation("MessageSender")
+  pushTokens          PushToken[]
+  notificationPrefs   NotificationPreference?
+
+  // ── Analytics Relations ──
+  analyticsEvents AnalyticsEvent[]
+
+  // ── Admin Relations ──
+  bidAnomaliesFlagged  BidAnomaly[] @relation("BidAnomalyProvider")
+  bidAnomaliesReviewed BidAnomaly[] @relation("BidAnomalyReviewer")
+  disputeResolutions   DisputeResolution[] @relation("DisputeResolvedBy")
+  paymentActionLogs    PaymentActionLog[]  @relation("PaymentActionActor")
+  notificationCampaigns NotificationCampaign[] @relation("NotificationCampaignActor")
+  cancellationsActed   Cancellation[] @relation("CancellationActor")
+  bannedByAdmin        User?  @relation("UserBanActor", fields: [bannedById], references: [id])
+  bannedById           String?
+  bannedUsers          User[] @relation("UserBanActor")
+  bannedAt             DateTime?
+  banReason            String?
+  suspendedUntil       DateTime?
+
+  @@index([role, accountStatus])
+  @@index([createdAt])
+  @@index([deletedAt])
   @@map("users")
+}
+
+model CustomerProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Preferences
+  preferredCategories String[] @default([])
+  savedAddresses      Json?    // Array of { label, address, lat, lng }
+  defaultLatitude     Float?
+  defaultLongitude    Float?
+  defaultAddress      String?
+
+  // Stats (denormalized for performance)
+  totalJobsPosted   Int @default(0)
+  totalJobsCompleted Int @default(0)
+  totalSpent        Decimal @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("customer_profiles")
+}
+
+model ProviderProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Profile
+  bio           String?
+  headline      String?
+  serviceRadius Float?   @default(25) // km
+
+  // Location
+  availabilityStatus    ProviderAvailabilityStatus @default(OFFLINE)
+  lastLocationLat       Float?
+  lastLocationLng       Float?
+  lastLocationAccuracy  Float?
+  lastLocationUpdatedAt DateTime?
+
+  // Verification
+  isBackgroundChecked Boolean @default(false)
+  isIdentityVerified  Boolean @default(false)
+
+  // Stats (denormalized caches — updated via triggers/cron)
+  averageRating    Decimal @default(0)    @db.Decimal(3, 2)
+  totalRatings     Int     @default(0)
+  totalJobsDone    Int     @default(0)
+  totalEarnings    Decimal @default(0)    @db.Decimal(12, 2)
+  completionRate   Decimal @default(100)  @db.Decimal(5, 2)
+  responseTimeAvg  Int     @default(0)    // seconds
+  disputeRate      Decimal @default(0)    @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([availabilityStatus])
+  @@index([averageRating(sort: Desc)])
+  @@map("provider_profiles")
+}
+
+model AdminProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  adminRole   AdminRole
+  permissions Json?     // Granular permission flags: { canManageUsers, canResolveDisputes, ... }
+  department  String?
+  lastActiveAt DateTime?
+
+  // Session management
+  adminSessions AdminSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin_profiles")
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String
+  code      String   // 6-digit OTP
+  token     String   @unique // Magic link token
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email, code])
+  @@index([token])
+  @@index([userId, createdAt])
+  @@map("email_verifications")
 }
 
 model PasswordResetToken {
@@ -217,327 +465,40 @@ model PasswordResetToken {
   token     String   @unique
   expiresAt DateTime
   used      Boolean  @default(false)
+  ipAddress String?
+  userAgent String?
   createdAt DateTime @default(now())
 
   @@index([token])
+  @@index([userId, createdAt])
   @@map("password_reset_tokens")
 }
 
-model ServiceRequest {
-  id                 String    @id @default(uuid())
-  orderId            String    @unique
-  customerId         String
-  customer           User      @relation("CustomerJobs", fields: [customerId], references: [id])
-  title              String
-  description        String
-  category           String
-  location           String
-  latitude           Float?
-  longitude          Float?
-  scheduledAt        DateTime? // Scheduled date/time for the service
-  images             String[]  @default([])
-  completedImages    String[]  @default([])
-  originalPrice      Float     @default(0)
-  urgency            String    @default("NORMAL")
-  revisedPrice       Float?
-  status             JobStatus @default(POSTED)
-  selectedBidId      String?
-  selectedProviderId String?
-  selectedProvider   User?     @relation("SelectedProvider", fields: [selectedProviderId], references: [id])
-  maxModifications   Int       @default(2)
-  modificationCount  Int       @default(0)
-
-  // Live location tracking
-  providerLat               Float?
-  providerLng               Float?
-  providerLocationUpdatedAt DateTime?
-
-  // Cancellation metadata
-  cancellationReason  String?
-  cancellationFee     Float     @default(0)
-
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  // Relations
-  bids          Bid[]
-  modifications JobModification[]
-  payments      Payment[]
-  ratings       Rating[]
-  disputes      Dispute[]
-  bidAnomalies  BidAnomaly[]
-  disputeResolutions DisputeResolution[]
-  chatMessages  ChatMessage[]
-  cancellations Cancellation[]
-
-  @@map("service_requests")
-}
-
-model Bid {
-  id                String         @id @default(uuid())
-  jobId             String
-  job               ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  providerId        String
-  provider          User           @relation(fields: [providerId], references: [id])
-  amount            Float
-  message           String
-  estimatedDuration String
-  isSelected        Boolean        @default(false)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  anomalies         BidAnomaly[]
-
-  @@unique([jobId, providerId])
-  @@map("bids")
-}
-
-model JobModification {
-  id               String         @id @default(uuid())
-  jobId            String
-  job              ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  providerId       String
-  provider         User           @relation(fields: [providerId], references: [id])
-  revisionReason   String
-  originalPrice    Float
-  revisedPrice     Float
-  revisionImages   String[]       @default([])
-  approvalStatus   ApprovalStatus @default(PENDING)
-  customerResponse String?
-  securityHash     String
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@map("job_modifications")
-}
-
-model Payment {
-  id                String         @id @default(uuid())
-  jobId             String
-  job               ServiceRequest @relation(fields: [jobId], references: [id])
-  payerId           String
-  payer             User           @relation("Payer", fields: [payerId], references: [id])
-  payeeId           String
-  payee             User           @relation("Payee", fields: [payeeId], references: [id])
-  amount            Float
-  currency          String         @default("INR")
-  status            PaymentStatus  @default(PENDING)
-  paymentMethod     String         @default("RAZORPAY")
-  razorpayOrderId   String?
-  razorpayPaymentId String?
-  razorpaySignature String?
-  securityHash      String?
-
-  // Commission & Tax
-  platformCommission Float       @default(0)
-  commissionRate     Float       @default(0)    // e.g. 0.10 for 10%
-  gstAmount          Float       @default(0)
-  gstRate            Float       @default(0.18) // 18% GST on commission
-  providerPayout     Float       @default(0)    // amount - platformCommission
-
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  actionLogs        PaymentActionLog[]
-
-  @@map("payments")
-}
-
-model Rating {
-  id        String         @id @default(uuid())
-  jobId     String
-  job       ServiceRequest @relation(fields: [jobId], references: [id])
-  raterId   String
-  rater     User           @relation("Rater", fields: [raterId], references: [id])
-  rateeId   String
-  ratee     User           @relation("Ratee", fields: [rateeId], references: [id])
-  score     Int
-  review    String
-  createdAt DateTime       @default(now())
-
-  @@unique([jobId, raterId])
-  @@map("ratings")
-}
-
-model Dispute {
-  id           String         @id @default(uuid())
-  jobId        String
-  job          ServiceRequest @relation(fields: [jobId], references: [id])
-  raisedById   String
-  raisedBy     User           @relation("DisputeRaiser", fields: [raisedById], references: [id])
-  reason       String
-  evidence     String[]       @default([])
-  status       DisputeStatus  @default(OPEN)
-  resolution   String?
-  resolvedById String?
-  resolvedBy   User?          @relation("DisputeResolver", fields: [resolvedById], references: [id])
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  decisions    DisputeResolution[]
-
-  @@map("disputes")
-}
-
-model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id])
-  type      NotificationType
-  title     String
-  body      String
-  data      Json?
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
-
-  @@index([userId, isRead])
-  @@map("notifications")
-}
-
-model AuditLog {
+model CaptchaVerification {
   id            String   @id @default(uuid())
-  entityType    String
-  entityId      String
-  action        String
-  performedById String
-  performedBy   User     @relation(fields: [performedById], references: [id])
-  previousState Json?
-  newState      Json?
-  ipAddress     String?
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action        String   // "signup", "login", "forgot_password", "bid"
+  provider      String   @default("CLOUDFLARE_TURNSTILE")
+  challengeTs   DateTime // When challenge was solved
+  hostname      String?
+  ipAddress     String
+  success       Boolean
+  errorCodes    String[] @default([])
+  attemptCount  Int      @default(1)
   createdAt     DateTime @default(now())
 
-  @@index([entityType, entityId])
-  @@map("audit_logs")
+  @@index([ipAddress, action, createdAt])
+  @@index([userId, action])
+  @@map("captcha_verifications")
 }
 
-model KycDocument {
-  id           String            @id @default(uuid())
-  userId       String
-  user         User              @relation("UserKycDocuments", fields: [userId], references: [id], onDelete: Cascade)
-  documentType KycDocumentType
-  fileKey      String
-  fileUrl      String
-  status       KycDocumentStatus @default(PENDING)
-  remarks      String?
-  reviewedById String?
-  reviewedBy   User?             @relation("KycReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt   DateTime?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-
-  reviewLogs   KycReviewLog[]
-
-  @@index([userId, status])
-  @@index([status, createdAt])
-  @@map("kyc_documents")
-}
-
-model KycReviewLog {
-  id            String      @id @default(uuid())
-  documentId    String
-  document      KycDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  adminId       String
-  admin         User        @relation("KycReviewActor", fields: [adminId], references: [id], onDelete: Cascade)
-  action        String
-  remarks       String?
-  previousState Json?
-  newState      Json?
-  createdAt     DateTime    @default(now())
-
-  @@index([documentId, createdAt])
-  @@map("kyc_review_logs")
-}
-
-model BidAnomaly {
-  id            String           @id @default(uuid())
-  bidId         String?
-  bid           Bid?             @relation(fields: [bidId], references: [id], onDelete: SetNull)
-  jobId         String
-  job           ServiceRequest   @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  providerId    String?
-  provider      User?            @relation("BidAnomalyProvider", fields: [providerId], references: [id], onDelete: SetNull)
-  anomalyType   BidAnomalyType
-  severityScore Int              @default(0)
-  reason        String
-  status        BidAnomalyStatus @default(OPEN)
-  reviewedById  String?
-  reviewedBy    User?            @relation("BidAnomalyReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt    DateTime?
-  metadata      Json?
-  createdAt     DateTime         @default(now())
-
-  @@index([jobId, status])
-  @@index([providerId, status])
-  @@map("bid_anomalies")
-}
-
-model DisputeResolution {
-  id           String          @id @default(uuid())
-  disputeId    String
-  dispute      Dispute         @relation(fields: [disputeId], references: [id], onDelete: Cascade)
-  jobId        String
-  job          ServiceRequest  @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  decision     DisputeDecision
-  refundAmount Float?
-  remarks      String?
-  resolvedById String
-  resolvedBy   User            @relation("DisputeResolvedBy", fields: [resolvedById], references: [id], onDelete: Cascade)
-  metadata     Json?
-  createdAt    DateTime        @default(now())
-
-  @@index([disputeId, createdAt])
-  @@index([jobId, createdAt])
-  @@map("dispute_resolutions")
-}
-
-model PaymentActionLog {
-  id        String   @id @default(uuid())
-  paymentId String
-  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  adminId   String
-  admin     User     @relation("PaymentActionActor", fields: [adminId], references: [id], onDelete: Cascade)
-  action    String
-  metadata  Json?
-  createdAt DateTime @default(now())
-
-  @@index([paymentId, createdAt])
-  @@map("payment_action_logs")
-}
-
-model AdminSession {
-  id               String   @id @default(uuid())
-  adminId          String
-  admin            User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  refreshTokenHash String
-  ipAddress        String?
-  userAgent        String?
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  createdAt        DateTime @default(now())
-
-  @@index([adminId, expiresAt])
-  @@index([refreshTokenHash])
-  @@map("admin_sessions")
-}
-
-model NotificationCampaign {
-  id          String   @id @default(uuid())
-  title       String
-  body        String
-  targetType  String
-  payload     Json?
-  sentById    String
-  sentBy      User     @relation("NotificationCampaignActor", fields: [sentById], references: [id], onDelete: Cascade)
-  sentAt      DateTime @default(now())
-  totalSent   Int      @default(0)
-  totalFailed Int      @default(0)
-  createdAt   DateTime @default(now())
-
-  @@index([sentById, sentAt])
-  @@map("notification_campaigns")
-}
+// ── Better-auth managed tables ──
 
 model Session {
   id        String   @id
   expiresAt DateTime
-  token     String
+  token     String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   ipAddress String?
@@ -545,7 +506,6 @@ model Session {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([token])
   @@index([userId])
   @@map("session")
 }
@@ -582,83 +542,1063 @@ model Verification {
   @@map("verification")
 }
 
-// ─── New Feature Models ───────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// JOBS & BIDDING
+// ─────────────────────────────────────────────────────────────────────────────
 
-model ChatMessage {
-  id          String         @id @default(uuid())
-  jobId       String
-  job         ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  senderId    String
-  sender      User           @relation("MessageSender", fields: [senderId], references: [id])
-  receiverId  String
-  receiver    User           @relation("MessageReceiver", fields: [receiverId], references: [id])
-  content     String
-  messageType MessageType    @default(TEXT)
-  imageUrl    String?
-  isRead      Boolean        @default(false)
-  createdAt   DateTime       @default(now())
+model ServiceCategory {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+  icon        String? // URL or icon name
+  parentId    String?
+  parent      ServiceCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    ServiceCategory[] @relation("CategoryHierarchy")
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  // Relations
+  serviceRequests ServiceRequest[]
+  providerSkills  ProviderSkill[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([isActive, sortOrder])
+  @@map("service_categories")
+}
+
+model ServiceRequest {
+  id         String    @id @default(uuid())
+  orderId    String    @unique @default(uuid()) // Human-readable order ID
+  customerId String
+  customer   User      @relation("CustomerJobs", fields: [customerId], references: [id])
+
+  // Details
+  title       String
+  description String
+  categoryId  String?
+  category    ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categorySlug String?         // Denormalized for quick filtering
+
+  // Location
+  location    String
+  latitude    Float?
+  longitude   Float?
+  address     Json?   // { street, city, state, pincode, landmark }
+
+  // Scheduling
+  scheduledAt DateTime?
+  urgency     String    @default("NORMAL") // NORMAL, URGENT, EMERGENCY
+
+  // Media
+  images          String[] @default([])
+  completedImages String[] @default([])
+
+  // Pricing
+  estimatedBudget Decimal? @db.Decimal(12, 2)
+  originalPrice   Decimal  @default(0) @db.Decimal(12, 2)
+  revisedPrice    Decimal? @db.Decimal(12, 2)
+  finalPrice      Decimal? @db.Decimal(12, 2)
+
+  // Status
+  status             JobStatus @default(POSTED)
+  selectedBidId      String?
+  selectedProviderId String?
+  selectedProvider   User?     @relation("SelectedProvider", fields: [selectedProviderId], references: [id])
+  maxModifications   Int       @default(2)
+  modificationCount  Int       @default(0)
+
+  // Live tracking
+  providerLat               Float?
+  providerLng               Float?
+  providerLocationUpdatedAt DateTime?
+
+  // Cancellation
+  cancellationReason String?
+  cancellationFee    Decimal @default(0) @db.Decimal(12, 2)
+
+  // Completion
+  completedAt DateTime?
+  expiresAt   DateTime?
+
+  // Soft delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bids               Bid[]
+  modifications      JobModification[]
+  attachments        JobAttachment[]
+  payments           Payment[]
+  escrowTransactions EscrowTransaction[]
+  ratings            Rating[]
+  reviews            Review[]
+  disputes           Dispute[]
+  chatRoom           ChatRoom?
+  bidAnomalies       BidAnomaly[]
+  disputeResolutions DisputeResolution[]
+  cancellations      Cancellation[]
+  voiceBooking       VoiceBooking?       @relation("VoiceBookingJob")
+  aiJobGeneration    AIJobGenerationHistory? @relation("AIGeneratedJob")
+  aiMatchHistory     AIMatchingHistory[]
+  dynamicPricing     DynamicPricingHistory[]
+
+  @@index([customerId, status])
+  @@index([status, createdAt])
+  @@index([categoryId, status])
+  @@index([selectedProviderId, status])
+  @@index([latitude, longitude])
+  @@index([deletedAt])
+  @@index([expiresAt])
+  @@map("service_requests")
+}
+
+model Bid {
+  id         String         @id @default(uuid())
+  jobId      String
+  job        ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  providerId String
+  provider   User           @relation(fields: [providerId], references: [id])
+
+  // Bid details
+  amount            Decimal   @db.Decimal(12, 2)
+  message           String
+  estimatedDuration String    // "2 hours", "1 day"
+  estimatedMinutes  Int?      // Machine-readable duration
+  status            BidStatus @default(PENDING)
+  isSelected        Boolean   @default(false)
+
+  // Bid history (for re-bids)
+  previousAmount  Decimal? @db.Decimal(12, 2)
+  rebidCount      Int      @default(0)
+  lastRebidAt     DateTime?
+
+  // Soft delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  anomalies BidAnomaly[]
+
+  @@unique([jobId, providerId])
+  @@index([jobId, status, createdAt])
+  @@index([providerId, status])
+  @@index([jobId, amount])
+  @@index([deletedAt])
+  @@map("bids")
+}
+
+model JobModification {
+  id         String         @id @default(uuid())
+  jobId      String
+  job        ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  providerId String
+  provider   User           @relation(fields: [providerId], references: [id])
+
+  revisionReason   String
+  originalPrice    Decimal        @db.Decimal(12, 2)
+  revisedPrice     Decimal        @db.Decimal(12, 2)
+  revisionImages   String[]       @default([])
+  approvalStatus   ApprovalStatus @default(PENDING)
+  customerResponse String?
+  securityHash     String
+  respondedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([jobId, createdAt])
-  @@index([senderId, receiverId])
-  @@map("chat_messages")
+  @@index([providerId, approvalStatus])
+  @@map("job_modifications")
+}
+
+model JobAttachment {
+  id    String         @id @default(uuid())
+  jobId String
+  job   ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  fileName    String
+  fileUrl     String
+  fileType    String    // "image/jpeg", "application/pdf", "audio/mp3"
+  fileSizeBytes Int
+  uploadedBy  String    // userId
+  category    String    @default("general") // "before", "after", "inspection", "evidence"
+
+  createdAt DateTime @default(now())
+
+  @@index([jobId, category])
+  @@map("job_attachments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENTS & ESCROW
+// ─────────────────────────────────────────────────────────────────────────────
+
+model EscrowTransaction {
+  id    String         @id @default(uuid())
+  jobId String
+  job   ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   User   @relation("EscrowCustomer", fields: [customerId], references: [id])
+  providerId String
+  provider   User   @relation("EscrowProvider", fields: [providerId], references: [id])
+
+  // Amounts
+  amount          Decimal      @db.Decimal(12, 2)
+  platformFee     Decimal      @default(0) @db.Decimal(12, 2)
+  providerPayout  Decimal      @default(0) @db.Decimal(12, 2)
+  refundAmount    Decimal?     @db.Decimal(12, 2)
+  currency        String       @default("INR")
+
+  // Status
+  status          EscrowStatus @default(PENDING)
+
+  // Razorpay references
+  razorpayOrderId   String?   @unique
+  razorpayPaymentId String?   @unique
+  razorpayTransferId String?
+
+  // Timestamps
+  heldAt              DateTime?
+  releaseRequestedAt  DateTime?
+  releasedAt          DateTime?
+  refundedAt          DateTime?
+
+  // Dispute lock
+  isDisputeLocked Boolean  @default(false)
+  disputeId       String?
+  dispute         Dispute? @relation(fields: [disputeId], references: [id], onDelete: SetNull)
+
+  // Auto-release
+  autoReleaseAt DateTime? // 48h after completion
+  autoReleased  Boolean   @default(false)
+
+  // Linked payment
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([jobId, status])
+  @@index([customerId, status])
+  @@index([providerId, status])
+  @@index([status, autoReleaseAt])
+  @@map("escrow_transactions")
+}
+
+model Payment {
+  id    String         @id @default(uuid())
+  jobId String
+  job   ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  payerId String
+  payer   User   @relation("Payer", fields: [payerId], references: [id])
+  payeeId String
+  payee   User   @relation("Payee", fields: [payeeId], references: [id])
+
+  // Amounts
+  amount             Decimal       @db.Decimal(12, 2)
+  currency           String        @default("INR")
+  status             PaymentStatus @default(PENDING)
+  paymentMethod      String        @default("RAZORPAY")
+
+  // Razorpay
+  razorpayOrderId    String?
+  razorpayPaymentId  String?       @unique
+  razorpaySignature  String?
+  razorpayRefundId   String?
+  securityHash       String?
+
+  // Commission & Tax
+  platformCommission Decimal @default(0) @db.Decimal(12, 2)
+  commissionRate     Decimal @default(0) @db.Decimal(5, 4) // e.g. 0.1000 for 10%
+  gstAmount          Decimal @default(0) @db.Decimal(12, 2)
+  gstRate            Decimal @default(0.18) @db.Decimal(5, 4) // 18%
+  providerPayout     Decimal @default(0) @db.Decimal(12, 2)
+
+  // Refund
+  refundAmount    Decimal? @db.Decimal(12, 2)
+  refundReason    String?
+  refundedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  escrowTransaction EscrowTransaction?
+  actionLogs        PaymentActionLog[]
+
+  @@index([jobId, status])
+  @@index([payerId, status])
+  @@index([payeeId, status])
+  @@index([razorpayOrderId])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+model PaymentActionLog {
+  id        String  @id @default(uuid())
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  adminId   String
+  admin     User    @relation("PaymentActionActor", fields: [adminId], references: [id])
+  action    String  // "capture", "refund", "release", "hold", "cancel"
+  reason    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([paymentId, createdAt])
+  @@map("payment_action_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRUST & SAFETY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Rating {
+  id      String         @id @default(uuid())
+  jobId   String
+  job     ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  raterId String
+  rater   User           @relation("Rater", fields: [raterId], references: [id])
+  rateeId String
+  ratee   User           @relation("Ratee", fields: [rateeId], references: [id])
+
+  // Rating breakdown
+  overallScore      Int       // 1-5
+  qualityScore      Int?      // 1-5
+  communicationScore Int?     // 1-5
+  punctualityScore  Int?      // 1-5
+  valueScore        Int?      // 1-5
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([jobId, raterId])
+  @@index([rateeId, overallScore])
+  @@index([rateeId, createdAt])
+  @@map("ratings")
+}
+
+model Review {
+  id      String         @id @default(uuid())
+  jobId   String
+  job     ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  authorId String
+  author   User          @relation("ReviewAuthor", fields: [authorId], references: [id])
+  subjectId String
+  subject   User         @relation("ReviewSubject", fields: [subjectId], references: [id])
+
+  text       String
+  isEdited   Boolean  @default(false)
+  isVisible  Boolean  @default(true)
+  isFlagged  Boolean  @default(false)
+
+  // Soft delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  editHistory ReviewEditHistory[]
+
+  @@unique([jobId, authorId])
+  @@index([subjectId, isVisible, createdAt])
+  @@index([deletedAt])
+  @@map("reviews")
+}
+
+model ReviewEditHistory {
+  id       String @id @default(uuid())
+  reviewId String
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  previousText String
+  newText      String
+  editedAt     DateTime @default(now())
+
+  @@index([reviewId, editedAt])
+  @@map("review_edit_history")
+}
+
+model Dispute {
+  id    String         @id @default(uuid())
+  jobId String
+  job   ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  raisedById String
+  raisedBy   User   @relation("DisputeRaiser", fields: [raisedById], references: [id])
+  reason     String
+  description String?
+  evidence   String[] @default([])
+
+  status     DisputeStatus @default(OPEN)
+  priority   SupportTicketPriority @default(MEDIUM)
+
+  resolution   String?
+  resolvedById String?
+  resolvedBy   User?  @relation("DisputeResolver", fields: [resolvedById], references: [id])
+  resolvedAt   DateTime?
+
+  // Escalation
+  escalatedAt     DateTime?
+  escalationNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  decisions          DisputeResolution[]
+  escrowTransactions EscrowTransaction[]
+
+  @@index([jobId, status])
+  @@index([raisedById, status])
+  @@index([status, priority, createdAt])
+  @@map("disputes")
+}
+
+model DisputeResolution {
+  id        String  @id @default(uuid())
+  disputeId String
+  dispute   Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  jobId     String
+  job       ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  decision     DisputeDecision
+  refundAmount Decimal?  @db.Decimal(12, 2)
+  remarks      String?
+  resolvedById String
+  resolvedBy   User     @relation("DisputeResolvedBy", fields: [resolvedById], references: [id])
+  metadata     Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([disputeId, createdAt])
+  @@index([jobId])
+  @@map("dispute_resolutions")
+}
+
+model SupportTicket {
+  id         String @id @default(uuid())
+  createdById String
+  createdBy   User  @relation("TicketCreator", fields: [createdById], references: [id])
+
+  subject     String
+  description String
+  category    String   // "payment", "dispute", "account", "technical", "other"
+  status      SupportTicketStatus   @default(OPEN)
+  priority    SupportTicketPriority @default(MEDIUM)
+
+  // Assignment
+  assignedToId String?
+  assignedTo   User?  @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  assignedAt   DateTime?
+
+  // Reference
+  relatedEntityType String? // "service_request", "payment", "dispute"
+  relatedEntityId   String?
+
+  // Resolution
+  resolution  String?
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdById, status])
+  @@index([assignedToId, status])
+  @@index([status, priority, createdAt])
+  @@index([relatedEntityType, relatedEntityId])
+  @@map("support_tickets")
+}
+
+model KYCVerification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation("UserKycVerifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  documentType   KycDocumentType
+  documentNumber String?          // Masked: "XXXX-XXXX-1234"
+  fileKey        String
+  fileUrl        String
+  backFileUrl    String?          // Back side of document
+  status         KycDocumentStatus @default(PENDING)
+
+  // Review
+  remarks      String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  expiresAt    DateTime?         // Document expiry
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  reviewLogs KYCReviewLog[]
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@index([documentType, userId])
+  @@map("kyc_verifications")
+}
+
+model KYCReviewLog {
+  id         String          @id @default(uuid())
+  documentId String
+  document   KYCVerification @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  adminId    String
+  admin      User            @relation("KycReviewActor", fields: [adminId], references: [id])
+  action     String          // "approve", "reject", "request_resubmit"
+  remarks    String?
+  previousState Json?
+  newState      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([documentId, createdAt])
+  @@map("kyc_review_logs")
+}
+
+model AuditLog {
+  id            String @id @default(uuid())
+  entityType    String // "user", "service_request", "payment", "dispute", ...
+  entityId      String
+  action        String // "create", "update", "delete", "status_change", ...
+  performedById String
+  performedBy   User   @relation(fields: [performedById], references: [id])
+
+  previousState Json?
+  newState      Json?
+  changedFields String[] @default([])
+
+  ipAddress String?
+  userAgent String?
+  sessionId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([performedById, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model BidAnomaly {
+  id         String           @id @default(uuid())
+  bidId      String?
+  bid        Bid?             @relation(fields: [bidId], references: [id], onDelete: SetNull)
+  jobId      String
+  job        ServiceRequest   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  providerId String?
+  provider   User?            @relation("BidAnomalyProvider", fields: [providerId], references: [id], onDelete: SetNull)
+
+  anomalyType   BidAnomalyType
+  severityScore Int              @default(0) // 0-100
+  reason        String
+  status        BidAnomalyStatus @default(OPEN)
+
+  reviewedById String?
+  reviewedBy   User?    @relation("BidAnomalyReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  metadata     Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([jobId, status])
+  @@index([providerId, status])
+  @@index([status, severityScore(sort: Desc)])
+  @@map("bid_anomalies")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVIDER DATA
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ProviderAvailability {
+  id         String @id @default(uuid())
+  providerId String
+  provider   User   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  dayOfWeek Int     // 0=Sunday, 6=Saturday
+  startTime String  // "09:00" (HH:mm)
+  endTime   String  // "18:00" (HH:mm)
+  isBlocked Boolean @default(false) // Full-day block
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([providerId, dayOfWeek])
+  @@map("provider_availability")
 }
 
 model ProviderSkill {
-  id              String   @id @default(uuid())
-  providerId      String
-  provider        User     @relation("ProviderSkills", fields: [providerId], references: [id], onDelete: Cascade)
-  category        String                          // e.g. "plumbing", "electrical"
-  experienceYears Int      @default(0)
-  isVerified      Boolean  @default(false)        // Admin-verified
-  createdAt       DateTime @default(now())
+  id         String @id @default(uuid())
+  providerId String
+  provider   User   @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
-  @@unique([providerId, category])
-  @@index([category])
+  categoryId String?
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryName String         // Denormalized: "plumbing", "electrical"
+
+  experienceYears Int     @default(0)
+  isVerified      Boolean @default(false)
+  certificationUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([providerId, categoryName])
+  @@index([categoryName])
+  @@index([categoryId])
   @@map("provider_skills")
 }
 
-model Cancellation {
-  id              String                @id @default(uuid())
-  jobId           String
-  job             ServiceRequest        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  cancelledById   String
-  cancelledBy     User                  @relation("CancellationActor", fields: [cancelledById], references: [id])
-  initiator       CancellationInitiator
-  reason          String
-  cancellationFee Float                 @default(0)
-  feePaid         Boolean               @default(false)
-  ratingPenalty   Boolean               @default(false)
-  createdAt       DateTime              @default(now())
+model ProviderDocument {
+  id         String @id @default(uuid())
+  providerId String
+  provider   User   @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
-  @@index([jobId])
-  @@map("cancellations")
+  title    String
+  fileUrl  String
+  fileType String  // "certificate", "license", "insurance", "training"
+  isVerified Boolean @default(false)
+  verifiedAt DateTime?
+  expiresAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([providerId, fileType])
+  @@map("provider_documents")
+}
+
+model LocationTracking {
+  id         String @id @default(uuid())
+  userId     String
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  latitude   Float
+  longitude  Float
+  accuracy   Float?   // meters
+  altitude   Float?
+  speed      Float?   // m/s
+  heading    Float?   // degrees
+
+  // Context
+  jobId      String?  // If tracking during active job
+  source     String   @default("gps") // "gps", "network", "manual"
+
+  timestamp  DateTime @default(now())
+
+  @@index([userId, timestamp])
+  @@index([jobId, timestamp])
+  @@index([timestamp])
+  @@map("location_tracking")
 }
 
 model PortfolioItem {
-  id          String   @id @default(uuid())
-  providerId  String
-  provider    User     @relation("ProviderPortfolio", fields: [providerId], references: [id], onDelete: Cascade)
+  id         String @id @default(uuid())
+  providerId String
+  provider   User   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
   title       String
   description String?
   imageUrl    String
   category    String?
-  createdAt   DateTime @default(now())
+  sortOrder   Int     @default(0)
 
-  @@index([providerId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([providerId, sortOrder])
   @@map("portfolio_items")
 }
 
-model ProviderAvailability {
-  id         String   @id @default(uuid())
-  providerId String
-  provider   User     @relation("ProviderAvailability", fields: [providerId], references: [id], onDelete: Cascade)
-  dayOfWeek  Int                             // 0=Sunday, 6=Saturday
-  startTime  String                          // "09:00"
-  endTime    String                          // "18:00"
-  isBlocked  Boolean  @default(false)        // Full-day block
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+// ─────────────────────────────────────────────────────────────────────────────
+// AI FEATURES
+// ─────────────────────────────────────────────────────────────────────────────
 
-  @@unique([providerId, dayOfWeek])
-  @@map("provider_availability")
+model VoiceBooking {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Audio
+  audioUrl     String
+  audioDuration Float?  // seconds
+  audioFormat  String?  // "mp3", "wav", "m4a"
+
+  // Transcription
+  transcription   String?
+  language        String? // "en", "hi", "te"
+  confidenceScore Float?  // 0.0-1.0
+
+  // Generated job
+  status              VoiceBookingStatus @default(PROCESSING)
+  generatedJobId      String?            @unique
+  generatedJob        ServiceRequest?    @relation("VoiceBookingJob", fields: [generatedJobId], references: [id], onDelete: SetNull)
+  generatedTitle      String?
+  generatedDescription String?
+  generatedCategory   String?
+
+  errorMessage String?
+  metadata     Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@map("voice_bookings")
+}
+
+model AIJobGenerationHistory {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Input
+  originalText String
+
+  // Output
+  generatedTitle       String?
+  generatedDescription String?
+  generatedCategory    String?
+  generatedTags        String[] @default([])
+  generatedUrgency     String?
+
+  // Link to created job
+  jobId String? @unique
+  job   ServiceRequest? @relation("AIGeneratedJob", fields: [jobId], references: [id], onDelete: SetNull)
+
+  // Model info
+  modelName    String?  // "gemini-2.0-flash", etc.
+  modelVersion String?
+  tokensUsed   Int?
+  latencyMs    Int?
+
+  // Quality
+  userAccepted Boolean?
+  userEdited   Boolean?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("ai_job_generation_history")
+}
+
+model AIMatchingHistory {
+  id    String @id @default(uuid())
+  jobId String
+  job   ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   User   @relation("MatchCustomer", fields: [customerId], references: [id])
+  providerId String
+  provider   User   @relation("MatchedProvider", fields: [providerId], references: [id])
+
+  // Scoring
+  matchScore       Float    // 0.0-1.0
+  rankPosition     Int      // 1 = best match
+  reasoningSummary String?  // "Matched based on category expertise, proximity, and rating"
+
+  // Score breakdown
+  categoryScore    Float?
+  locationScore    Float?
+  ratingScore      Float?
+  availabilityScore Float?
+  priceScore       Float?
+
+  // Outcome
+  wasSelected Boolean @default(false)
+
+  modelName String?
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([jobId, matchScore(sort: Desc)])
+  @@index([providerId, createdAt])
+  @@index([customerId, createdAt])
+  @@map("ai_matching_history")
+}
+
+model DynamicPricingHistory {
+  id    String @id @default(uuid())
+  jobId String
+  job   ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Pricing factors
+  baseEstimate    Decimal  @db.Decimal(12, 2)
+  surgeMultiplier Decimal  @default(1.0) @db.Decimal(5, 3) // e.g. 1.500
+  demandScore     Float?   // 0.0-1.0
+  supplyScore     Float?   // 0.0-1.0
+  weatherFactor   Decimal  @default(1.0) @db.Decimal(5, 3)
+  timeFactor      Decimal  @default(1.0) @db.Decimal(5, 3) // Peak hours
+  distanceFactor  Decimal  @default(1.0) @db.Decimal(5, 3)
+  categoryFactor  Decimal  @default(1.0) @db.Decimal(5, 3)
+
+  // Result
+  finalEstimate   Decimal  @db.Decimal(12, 2)
+  confidenceLevel Float?   // 0.0-1.0
+
+  // Context
+  regionCode String?  // Geo region for demand calculation
+  weatherCondition String? // "clear", "rain", "extreme_heat"
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([jobId, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("dynamic_pricing_history")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMUNICATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ChatRoom {
+  id    String         @id @default(uuid())
+  jobId String         @unique
+  job   ServiceRequest @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  isActive  Boolean @default(true)
+  closedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  members  ChatRoomMember[]
+  messages ChatMessage[]
+
+  @@index([isActive])
+  @@map("chat_rooms")
+}
+
+model ChatRoomMember {
+  id         String   @id @default(uuid())
+  chatRoomId String
+  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role       String   @default("participant") // "participant", "admin"
+  joinedAt   DateTime @default(now())
+  leftAt     DateTime?
+  lastReadAt DateTime?
+
+  @@unique([chatRoomId, userId])
+  @@index([userId])
+  @@map("chat_room_members")
+}
+
+model ChatMessage {
+  id         String   @id @default(uuid())
+  chatRoomId String
+  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User     @relation("MessageSender", fields: [senderId], references: [id])
+
+  content     String
+  messageType MessageType @default(TEXT)
+
+  // Media
+  mediaUrl    String?
+  mediaType   String?   // MIME type
+  fileName    String?
+
+  // Status
+  isEdited  Boolean   @default(false)
+  editedAt  DateTime?
+
+  // Soft delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([chatRoomId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([deletedAt])
+  @@map("chat_messages")
+}
+
+model PushToken {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  token    String @unique
+  platform DevicePlatform
+  deviceId String?        // Unique device identifier
+  deviceName String?      // "iPhone 15 Pro", "Pixel 8"
+
+  isActive    Boolean  @default(true)
+  lastUsedAt  DateTime?
+  failureCount Int     @default(0) // Increment on send failure, deactivate at threshold
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@index([token])
+  @@map("push_tokens")
+}
+
+model NotificationPreference {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Push notification channels (FCM)
+  pushBidUpdates     Boolean @default(true)
+  pushJobUpdates     Boolean @default(true)
+  pushPayments       Boolean @default(true)
+  pushChat           Boolean @default(true)
+  pushDisputes       Boolean @default(true)
+  pushMarketing      Boolean @default(false)
+  pushSystemAlerts   Boolean @default(true)
+
+  // Email notification channels
+  emailBidUpdates    Boolean @default(true)
+  emailJobUpdates    Boolean @default(true)
+  emailPayments      Boolean @default(true)
+  emailDisputes      Boolean @default(true)
+  emailMarketing     Boolean @default(false)
+  emailWeeklyDigest  Boolean @default(true)
+
+  // Quiet hours
+  quietHoursEnabled Boolean  @default(false)
+  quietHoursStart   String?  // "22:00"
+  quietHoursEnd     String?  // "07:00"
+  timezone          String   @default("Asia/Kolkata")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notification_preferences")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALYTICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AnalyticsEvent {
+  id     String             @id @default(uuid())
+  userId String?
+  user   User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  eventType  AnalyticsEventType
+  entityType String?          // "service_request", "bid", "payment", ...
+  entityId   String?
+
+  // Context
+  sessionId  String?
+  ipAddress  String?
+  userAgent  String?
+  platform   DevicePlatform?
+  appVersion String?
+
+  // Payload
+  metadata Json?
+
+  timestamp DateTime @default(now())
+
+  @@index([eventType, timestamp])
+  @@index([userId, eventType, timestamp])
+  @@index([entityType, entityId, timestamp])
+  @@index([timestamp])
+  @@map("analytics_events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN OPERATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AdminSession {
+  id               String       @id @default(uuid())
+  adminProfileId   String
+  adminProfile     AdminProfile @relation(fields: [adminProfileId], references: [id], onDelete: Cascade)
+
+  refreshTokenHash String
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([adminProfileId, expiresAt])
+  @@index([refreshTokenHash])
+  @@map("admin_sessions")
+}
+
+model NotificationCampaign {
+  id        String @id @default(uuid())
+  sentById  String
+  sentBy    User   @relation("NotificationCampaignActor", fields: [sentById], references: [id])
+
+  title      String
+  body       String
+  targetType String  // "all", "customers", "providers", "category:{slug}", "region:{code}"
+  targetFilter Json? // Additional filter criteria
+  payload    Json?   // Data payload for push
+
+  // Stats
+  totalTargeted Int @default(0)
+  totalSent     Int @default(0)
+  totalDelivered Int @default(0)
+  totalFailed   Int @default(0)
+  totalClicked  Int @default(0)
+
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([sentById, createdAt])
+  @@index([scheduledAt])
+  @@map("notification_campaigns")
+}
+
+model Cancellation {
+  id            String                @id @default(uuid())
+  jobId         String
+  job           ServiceRequest        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  cancelledById String
+  cancelledBy   User                  @relation("CancellationActor", fields: [cancelledById], references: [id])
+  initiator     CancellationInitiator
+  reason        String
+  cancellationFee Decimal             @default(0) @db.Decimal(12, 2)
+  feePaid       Boolean               @default(false)
+  ratingPenalty Boolean               @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([jobId])
+  @@index([cancelledById, createdAt])
+  @@map("cancellations")
 }

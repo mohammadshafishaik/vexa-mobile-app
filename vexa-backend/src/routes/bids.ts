@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { authMiddleware } from '../middleware/auth';
 import { getIO } from '../lib/socket';
 import { createAndPushNotification } from '../utils/notificationHelper';
+import { sendBidReceivedEmail, sendProviderSelectedEmail } from '../lib/email';
 
 const router = Router();
 
@@ -12,7 +13,9 @@ const ensureProviderCanBid = async (userId: string): Promise<string | null> => {
     select: {
       role: true,
       accountStatus: true,
-      availabilityStatus: true,
+      providerProfile: {
+        select: { availabilityStatus: true },
+      },
     },
   });
 
@@ -24,7 +27,7 @@ const ensureProviderCanBid = async (userId: string): Promise<string | null> => {
     return 'Your account is not active for bidding';
   }
 
-  if (provider.availabilityStatus !== 'ONLINE') {
+  if (provider.providerProfile?.availabilityStatus !== 'ONLINE') {
     return 'Set your availability to ONLINE before placing or updating bids';
   }
 
@@ -49,7 +52,10 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // Check job exists and is in BIDDING status
-    const job = await prisma.serviceRequest.findUnique({ where: { id: jobId } });
+    const job = await prisma.serviceRequest.findUnique({
+      where: { id: jobId },
+      include: { customer: true },
+    });
     if (!job) {
       res.status(404).json({ success: false, message: 'Job not found' });
       return;
@@ -68,16 +74,16 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     // Validate provider has matching skill for this job category
     const providerSkills = await prisma.providerSkill.findMany({
       where: { providerId: req.user!.userId },
-      select: { category: true },
+      select: { categoryName: true },
     });
     if (providerSkills.length > 0) {
       const hasMatchingSkill = providerSkills.some(
-        (s) => s.category.toLowerCase() === (job.category || '').toLowerCase()
+        (s) => s.categoryName.toLowerCase() === (job.categorySlug || 'general').toLowerCase()
       );
       if (!hasMatchingSkill) {
         res.status(403).json({
           success: false,
-          message: `You do not have the "${job.category}" skill registered. Add it in your profile to bid on this job.`,
+          message: `You do not have the "${job.categorySlug || 'general'}" skill registered. Add it in your profile to bid on this job.`,
         });
         return;
       }
@@ -93,7 +99,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         return;
       }
 
-      if (numericAmount >= existingBid.amount) {
+      if (numericAmount >= Number(existingBid.amount)) {
         res.status(400).json({
           success: false,
           message: `Re-bid amount must be lower than your current bid of ₹${existingBid.amount}`,
@@ -109,7 +115,20 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
           estimatedDuration,
         },
         include: {
-          provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+          provider: {
+            select: {
+              id: true,
+              name: true,
+              avatarUrl: true,
+              phone: true,
+              role: true,
+              email: true,
+              isVerified: true,
+              createdAt: true,
+              updatedAt: true,
+              providerProfile: { select: { availabilityStatus: true } },
+            },
+          },
         },
       });
 
@@ -118,8 +137,19 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         type: 'BID_RECEIVED',
         title: 'Bid Updated 🔁',
         body: `${updatedBid.provider.name} updated bid to ₹${updatedBid.amount} on "${job.title}"`,
-        data: { jobId, bidId: updatedBid.id, providerName: updatedBid.provider.name, amount: updatedBid.amount },
+        data: { jobId, bidId: updatedBid.id, providerName: updatedBid.provider.name, amount: String(updatedBid.amount) },
       });
+
+      if (job.customer) {
+        sendBidReceivedEmail(job.customer.email, {
+          customerName: job.customer.name,
+          jobTitle: job.title,
+          orderId: job.orderId,
+          providerName: updatedBid.provider.name,
+          bidAmount: String(updatedBid.amount),
+          estimatedDuration,
+        }).catch(err => console.error('Failed to send bid update email:', err));
+      }
 
       try {
         getIO().to(`bidding:${jobId}`).emit('bid:updated', updatedBid);
@@ -139,7 +169,20 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         estimatedDuration,
       },
       include: {
-        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        provider: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            phone: true,
+            role: true,
+            email: true,
+            isVerified: true,
+            createdAt: true,
+            updatedAt: true,
+            providerProfile: { select: { availabilityStatus: true } },
+          },
+        },
       },
     });
 
@@ -151,14 +194,25 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       });
     }
 
-    // ─── Real-time notification to customer (DB + Socket.IO) ───
+    // ─── Real-time notification to customer ───
     await createAndPushNotification({
       userId: job.customerId,
       type: 'BID_RECEIVED',
       title: 'New Bid Received 🔔',
       body: `${bid.provider.name} bid ₹${bid.amount} on "${job.title}"`,
-      data: { jobId, bidId: bid.id, providerName: bid.provider.name, amount: bid.amount },
+      data: { jobId, bidId: bid.id, providerName: bid.provider.name, amount: String(bid.amount) },
     });
+
+    if (job.customer) {
+      sendBidReceivedEmail(job.customer.email, {
+        customerName: job.customer.name,
+        jobTitle: job.title,
+        orderId: job.orderId,
+        providerName: bid.provider.name,
+        bidAmount: String(bid.amount),
+        estimatedDuration,
+      }).catch(err => console.error('Failed to send bid received email:', err));
+    }
 
     // Broadcast new bid to the bidding room (live UI update)
     try {
@@ -178,7 +232,20 @@ router.get('/job/:jobId', authMiddleware, async (req: Request, res: Response) =>
     const bids = await prisma.bid.findMany({
       where: { jobId: req.params.jobId as string },
       include: {
-        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        provider: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            phone: true,
+            role: true,
+            email: true,
+            isVerified: true,
+            createdAt: true,
+            updatedAt: true,
+            providerProfile: { select: { availabilityStatus: true } },
+          },
+        },
       },
       orderBy: { amount: 'asc' },
     });
@@ -201,8 +268,13 @@ router.get('/my', authMiddleware, async (req: Request, res: Response) => {
         include: {
           job: {
             select: {
-              id: true, title: true, category: true, location: true,
-              originalPrice: true, revisedPrice: true, status: true,
+              id: true,
+              title: true,
+              categoryName: true,
+              locationName: true,
+              originalPrice: true,
+              revisedPrice: true,
+              status: true,
               customer: { select: { id: true, name: true, avatarUrl: true } },
             },
           },
@@ -264,7 +336,7 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
         return;
       }
 
-      if ((numericAmount as number) >= bid.amount) {
+      if ((numericAmount as number) >= Number(bid.amount)) {
         res.status(400).json({
           success: false,
           message: `Re-bid amount must be lower than your current bid of ₹${bid.amount}`,
@@ -281,7 +353,20 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
         ...(estimatedDuration && { estimatedDuration }),
       },
       include: {
-        provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        provider: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            phone: true,
+            role: true,
+            email: true,
+            isVerified: true,
+            createdAt: true,
+            updatedAt: true,
+            providerProfile: { select: { availabilityStatus: true } },
+          },
+        },
       },
     });
 
@@ -364,7 +449,7 @@ router.post('/:id/accept', authMiddleware, async (req: Request, res: Response) =
       }),
     ]);
 
-    // ─── Real-time notification to provider (DB + Socket.IO) ───
+    // ─── Real-time notification to provider ───
     await createAndPushNotification({
       userId: bid.providerId,
       type: 'BID_ACCEPTED',
@@ -372,6 +457,20 @@ router.post('/:id/accept', authMiddleware, async (req: Request, res: Response) =
       body: `Your bid of ₹${bid.amount} on "${bid.job.title}" was accepted`,
       data: { jobId: bid.jobId, bidId: bid.id },
     });
+
+    const customerUser = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { name: true },
+    });
+    if (customerUser) {
+      sendProviderSelectedEmail(bid.provider.email, {
+        providerName: bid.provider.name,
+        jobTitle: bid.job.title,
+        orderId: bid.job.orderId,
+        customerName: customerUser.name,
+        amount: String(bid.amount),
+      }).catch(err => console.error('Failed to send provider selected email:', err));
+    }
 
     // Broadcast to bidding room so other bidders know
     try {

@@ -113,7 +113,7 @@ const applyUserStatusChange = async ({
     return null;
   }
 
-  const updateData: any = { accountStatus };
+  const updateData: any = { accountStatus: accountStatus as any };
   const previousStatus = user.accountStatus;
 
   if (accountStatus === 'SUSPENDED') {
@@ -169,8 +169,8 @@ const applyUserStatusChange = async ({
 
   try {
     const notificationPayload = buildStatusNotificationPayload({
-      accountStatus,
-      previousStatus,
+      accountStatus: accountStatus as any,
+      previousStatus: previousStatus as any,
       reason: accountStatus === 'ACTIVE' ? null : updated.banReason,
       suspendedUntil: updated.suspendedUntil,
     });
@@ -182,7 +182,7 @@ const applyUserStatusChange = async ({
       body: notificationPayload.body,
       data: {
         accountStatus: updated.accountStatus,
-        previousStatus,
+        previousStatus: previousStatus as any,
         suspendedUntil: updated.suspendedUntil ? updated.suspendedUntil.toISOString() : null,
         reason: updated.banReason || null,
       },
@@ -229,13 +229,15 @@ router.get('/users', async (req: Request, res: Response) => {
           email: true,
           phone: true,
           role: true,
-          adminRole: true,
           accountStatus: true,
-          availabilityStatus: true,
           isVerified: true,
-          kycStatus: true,
           createdAt: true,
           updatedAt: true,
+          adminProfile: {
+            select: {
+              adminRole: true,
+            },
+          },
           sessions: {
             select: {
               updatedAt: true,
@@ -261,10 +263,11 @@ router.get('/users', async (req: Request, res: Response) => {
 
     const usersWithPresence = items.map((item) => {
       const latestSession = item.sessions[0] || null;
-      const { sessions, ...rest } = item;
+      const { sessions, adminProfile, ...rest } = item;
 
       return {
         ...rest,
+        adminRole: adminProfile?.adminRole || null,
         presenceStatus: toPresenceStatus(latestSession),
       };
     });
@@ -287,7 +290,12 @@ router.get('/users/:id', async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { id: String(req.params.id) },
       include: {
-        kycDocumentsUploaded: {
+        adminProfile: {
+          select: {
+            adminRole: true,
+          },
+        },
+        kycVerifications: {
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
@@ -298,7 +306,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
             id: true,
             orderId: true,
             title: true,
-            category: true,
+            categorySlug: true,
             status: true,
             originalPrice: true,
             revisedPrice: true,
@@ -312,7 +320,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
             id: true,
             orderId: true,
             title: true,
-            category: true,
+            categorySlug: true,
             status: true,
             originalPrice: true,
             revisedPrice: true,
@@ -360,12 +368,13 @@ router.get('/users/:id', async (req: Request, res: Response) => {
     }
 
     const latestSession = user.sessions[0] || null;
-    const { sessions, ...userWithoutSessions } = user;
+    const { sessions, adminProfile, ...userWithoutSessions } = user;
 
     res.json({
       success: true,
       data: {
         ...userWithoutSessions,
+        adminRole: adminProfile?.adminRole || null,
         presenceStatus: toPresenceStatus(latestSession),
       },
     });
@@ -534,15 +543,27 @@ router.get('/admins', requireAdminRole(['SUPER_ADMIN']), async (_req: Request, r
         id: true,
         name: true,
         email: true,
-        adminRole: true,
         accountStatus: true,
         createdAt: true,
         updatedAt: true,
+        adminProfile: {
+          select: {
+            adminRole: true,
+          },
+        },
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    res.json({ success: true, data: admins });
+    const formattedAdmins = admins.map((admin) => {
+      const { adminProfile, ...rest } = admin;
+      return {
+        ...rest,
+        adminRole: adminProfile?.adminRole || null,
+      };
+    });
+
+    res.json({ success: true, data: formattedAdmins });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -581,30 +602,48 @@ router.post('/admins', requireAdminRole(['SUPER_ADMIN']), async (req: Request, r
         email: email.trim().toLowerCase(),
         password: hashedPassword,
         role: 'ADMIN',
-        adminRole,
         accountStatus: 'ACTIVE',
+        adminProfile: {
+          create: {
+            adminRole: adminRole as any,
+          },
+        },
       },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        adminRole: true,
         accountStatus: true,
         createdAt: true,
+        adminProfile: {
+          select: {
+            adminRole: true,
+          },
+        },
       },
     });
+
+    const formattedAdmin = {
+      id: adminUser.id,
+      name: adminUser.name,
+      email: adminUser.email,
+      role: adminUser.role,
+      adminRole: adminUser.adminProfile?.adminRole || null,
+      accountStatus: adminUser.accountStatus,
+      createdAt: adminUser.createdAt,
+    };
 
     await logAdminAction({
       entityType: 'ADMIN_USER',
       entityId: adminUser.id,
       action: 'ADMIN_USER_CREATED',
       performedById: req.admin!.userId,
-      newState: adminUser,
+      newState: formattedAdmin,
       req,
     });
 
-    res.status(201).json({ success: true, data: adminUser });
+    res.status(201).json({ success: true, data: formattedAdmin });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -624,7 +663,11 @@ router.patch('/admins/:id/role', requireAdminRole(['SUPER_ADMIN']), async (req: 
       select: {
         id: true,
         role: true,
-        adminRole: true,
+        adminProfile: {
+          select: {
+            adminRole: true,
+          },
+        },
       },
     });
 
@@ -635,28 +678,51 @@ router.patch('/admins/:id/role', requireAdminRole(['SUPER_ADMIN']), async (req: 
 
     const updated = await prisma.user.update({
       where: { id: String(req.params.id) },
-      data: { adminRole },
+      data: {
+        adminProfile: {
+          update: {
+            adminRole: adminRole as any,
+          },
+        },
+      },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        adminRole: true,
         accountStatus: true,
+        adminProfile: {
+          select: {
+            adminRole: true,
+          },
+        },
       },
     });
+
+    const formattedUpdated = {
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      role: updated.role,
+      adminRole: updated.adminProfile?.adminRole || null,
+      accountStatus: updated.accountStatus,
+    };
 
     await logAdminAction({
       entityType: 'ADMIN_USER',
       entityId: existing.id,
       action: 'ADMIN_ROLE_UPDATED',
       performedById: req.admin!.userId,
-      previousState: existing,
-      newState: updated,
+      previousState: {
+        id: existing.id,
+        role: existing.role,
+        adminRole: existing.adminProfile?.adminRole || null,
+      },
+      newState: formattedUpdated,
       req,
     });
 
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: formattedUpdated });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -60,8 +60,8 @@ router.get('/analytics/overview', async (_req: Request, res: Response) => {
         where: { status: 'REFUNDED' },
         _sum: { amount: true },
       }),
-      prisma.kycDocument.count(),
-      prisma.kycDocument.count({ where: { status: 'PENDING' } }),
+      prisma.kYCVerification.count(),
+      prisma.kYCVerification.count({ where: { status: 'PENDING' } }),
       prisma.bidAnomaly.count({ where: { status: { in: ['OPEN', 'REVIEWED'] } } }),
       prisma.chatMessage.count(),
       prisma.providerSkill.count(),
@@ -69,6 +69,9 @@ router.get('/analytics/overview', async (_req: Request, res: Response) => {
       prisma.cancellation.count(),
       prisma.user.count({ where: { role: 'PROVIDER', availabilityStatus: 'ONLINE' } }),
     ]);
+
+    const grossRevenue = Number(paymentCompletedAggregate._sum.amount || 0);
+    const refundedAmount = Number(paymentRefundedAggregate._sum.amount || 0);
 
     res.json({
       success: true,
@@ -92,11 +95,9 @@ router.get('/analytics/overview', async (_req: Request, res: Response) => {
         },
         payments: {
           total: totalPayments,
-          grossRevenue: paymentCompletedAggregate._sum.amount || 0,
-          refundedAmount: paymentRefundedAggregate._sum.amount || 0,
-          netRevenue:
-            (paymentCompletedAggregate._sum.amount || 0)
-            - (paymentRefundedAggregate._sum.amount || 0),
+          grossRevenue,
+          refundedAmount,
+          netRevenue: grossRevenue - refundedAmount,
         },
         kyc: {
           totalDocuments: totalKycDocs,
@@ -197,12 +198,12 @@ router.get('/analytics/trends', async (req: Request, res: Response) => {
 
       if (item.status === 'COMPLETED') {
         row.paymentsCompleted += 1;
-        row.revenue += item.amount;
+        row.revenue += Number(item.amount);
       }
 
       if (item.status === 'REFUNDED') {
         row.paymentsRefunded += 1;
-        row.refunded += item.amount;
+        row.refunded += Number(item.amount);
       }
     }
 
@@ -229,7 +230,7 @@ router.get('/analytics/providers', async (req: Request, res: Response) => {
           select: { id: true, createdAt: true },
         },
         ratingsReceived: {
-          select: { score: true },
+          select: { overallScore: true },
         },
         paymentsReceived: {
           where: { status: 'COMPLETED' },
@@ -242,9 +243,9 @@ router.get('/analytics/providers', async (req: Request, res: Response) => {
     const scored = providers
       .map((provider) => {
         const totalCompletedJobs = provider.selectedForJobs.length;
-        const totalEarnings = provider.paymentsReceived.reduce((sum, payment) => sum + payment.amount, 0);
+        const totalEarnings = provider.paymentsReceived.reduce((sum, payment) => sum + Number(payment.amount), 0);
         const avgRating = provider.ratingsReceived.length
-          ? provider.ratingsReceived.reduce((sum, rating) => sum + rating.score, 0) / provider.ratingsReceived.length
+          ? provider.ratingsReceived.reduce((sum, rating) => sum + rating.overallScore, 0) / provider.ratingsReceived.length
           : 0;
 
         return {

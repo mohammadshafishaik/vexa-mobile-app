@@ -1,0 +1,33 @@
+import { Router } from 'express';
+import authRoutes from './auth';
+import userRoutes from './users';
+import kycRoutes from './kyc';
+import jobsRoutes from './jobs';
+import biddingRoutes from './bidding';
+import modificationRoutes from './modifications';
+import paymentRoutes from './payments';
+import disputeRoutes from './disputes';
+import ratingRoutes from './ratings';
+import notificationRoutes from './notifications';
+import analyticsRoutes from './analytics';
+import auditRoutes from './audit';
+import recommendationRoutes from './recommendations';
+const router = Router();
+router.get('/health', (_req, res) => {
+    res.json({ success: true, status: 'ok', scope: 'admin' });
+});
+router.use(authRoutes);
+router.use(userRoutes);
+router.use(kycRoutes);
+router.use(jobsRoutes);
+router.use(biddingRoutes);
+router.use(modificationRoutes);
+router.use(paymentRoutes);
+router.use(disputeRoutes);
+router.use(ratingRoutes);
+router.use(notificationRoutes);
+router.use(analyticsRoutes);
+router.use(recommendationRoutes);
+router.use(auditRoutes);
+export default router;
+//# sourceMappingURL=index.js.map

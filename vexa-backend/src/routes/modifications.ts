@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import prisma from '../lib/prisma';
 import { authMiddleware } from '../middleware/auth';
 import { getIO } from '../lib/socket';
+import { createAndPushNotification } from '../utils/notificationHelper';
+import { sendModificationRequestEmail } from '../lib/email';
 
 const router = Router();
 
@@ -17,7 +19,10 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const job = await prisma.serviceRequest.findUnique({ where: { id: jobId } });
+    const job = await prisma.serviceRequest.findUnique({
+      where: { id: jobId },
+      include: { customer: true },
+    });
     if (!job) {
       res.status(404).json({ success: false, message: 'Job not found' });
       return;
@@ -57,15 +62,24 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     });
 
     // Notify customer
-    const notification = await prisma.notification.create({
-      data: {
-        userId: job.customerId,
-        type: 'MODIFICATION_REQUEST',
-        title: 'Modification Request',
-        body: `Provider requested a price change to ₹${revisedPrice} on "${job.title}"`,
-        data: { jobId, modificationId: modification.id },
-      },
+    const notification = await createAndPushNotification({
+      userId: job.customerId,
+      type: 'MODIFICATION_REQUEST',
+      title: 'Modification Request',
+      body: `Provider requested a price change to ₹${revisedPrice} on "${job.title}"`,
+      data: { jobId, modificationId: modification.id },
     });
+
+    if (job.customer) {
+      sendModificationRequestEmail(job.customer.email, {
+        customerName: job.customer.name,
+        jobTitle: job.title,
+        orderId: job.orderId,
+        originalPrice: String(job.revisedPrice || job.originalPrice),
+        revisedPrice: String(revisedPrice),
+        reason: revisionReason,
+      }).catch(err => console.error('Failed to send modification request email:', err));
+    }
 
     // Emit Socket.io events
     try {
@@ -138,14 +152,12 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // Notify provider
-    const notification = await prisma.notification.create({
-      data: {
-        userId: modification.providerId,
-        type: approvalStatus === 'APPROVED' ? 'MODIFICATION_APPROVED' : 'MODIFICATION_REJECTED',
-        title: `Modification ${approvalStatus === 'APPROVED' ? 'Approved' : 'Rejected'}`,
-        body: `Your modification on "${modification.job.title}" was ${approvalStatus.toLowerCase()}`,
-        data: { jobId: modification.jobId, modificationId: modification.id },
-      },
+    const notification = await createAndPushNotification({
+      userId: modification.providerId,
+      type: approvalStatus === 'APPROVED' ? 'MODIFICATION_APPROVED' : 'MODIFICATION_REJECTED',
+      title: `Modification ${approvalStatus === 'APPROVED' ? 'Approved' : 'Rejected'}`,
+      body: `Your modification on "${modification.job.title}" was ${approvalStatus.toLowerCase()}`,
+      data: { jobId: modification.jobId, modificationId: modification.id },
     });
 
     // Emit Socket.io events

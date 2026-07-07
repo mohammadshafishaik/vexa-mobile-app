@@ -1,0 +1,1 @@
+Unknown error during config file loading: Error: Invalid package config /Users/shaikshafi/Documents/software project/vexa-backend/node_modules/deepmerge-ts/package.json while importing "deepmerge-ts" from /Users/shaikshafi/Documents/software project/vexa-backend/node_modules/@prisma/config/dist/index.js.

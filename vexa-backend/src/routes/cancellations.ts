@@ -87,7 +87,7 @@ router.post('/:jobId', authMiddleware, async (req: Request, res: Response) => {
     }
 
     const initiator = job.customerId === userId ? 'CUSTOMER' : 'PROVIDER';
-    const bidAmount = job.bids[0]?.amount || job.revisedPrice || job.originalPrice;
+    const bidAmount = Number(job.bids[0]?.amount || job.revisedPrice || job.originalPrice);
     const { fee, ratingPenalty } = calculateCancellationFee(job.status, initiator, bidAmount);
 
     // Create cancellation record and update job in a transaction
@@ -169,7 +169,7 @@ router.get('/history/my', authMiddleware, async (req: Request, res: Response) =>
       prisma.cancellation.findMany({
         where: { cancelledById: req.user!.userId },
         include: {
-          job: { select: { id: true, title: true, orderId: true, category: true } },
+          job: { select: { id: true, title: true, orderId: true, categoryName: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,

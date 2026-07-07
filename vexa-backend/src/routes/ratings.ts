@@ -6,7 +6,7 @@ import { getIO } from '../lib/socket';
 
 const router = Router();
 
-// ─── POST /api/ratings — submit a rating ──────────────────
+// ─── POST /api/ratings — submit a rating & review ──────────
 // ONLY allowed when job status is COMPLETED or PAID
 router.post('/', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -58,20 +58,32 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    // Create the rating in the database
-    const rating = await prisma.rating.create({
-      data: {
-        jobId,
-        raterId: req.user!.userId,
-        rateeId,
-        score: Math.round(score),
-        review,
-      },
-      include: {
-        rater: { select: { id: true, name: true, avatarUrl: true } },
-        ratee: { select: { id: true, name: true, avatarUrl: true } },
-        job: { select: { id: true, title: true } },
-      },
+    // Create the rating & review in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const rating = await tx.rating.create({
+        data: {
+          jobId,
+          raterId: req.user!.userId,
+          rateeId,
+          overallScore: Math.round(score),
+        },
+        include: {
+          rater: { select: { id: true, name: true, avatarUrl: true } },
+          ratee: { select: { id: true, name: true, avatarUrl: true } },
+          job: { select: { id: true, title: true } },
+        },
+      });
+
+      const reviewRecord = await tx.review.create({
+        data: {
+          jobId,
+          authorId: req.user!.userId,
+          subjectId: rateeId,
+          text: review,
+        },
+      });
+
+      return { rating, review: reviewRecord };
     });
 
     // ─── Real-time notification to the rated user ───
@@ -79,14 +91,14 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       userId: rateeId,
       type: 'RATING_RECEIVED',
       title: 'New Rating Received ⭐',
-      body: `${rating.rater.name} gave you a ${score}-star rating for "${rating.job.title}"`,
-      data: { jobId, ratingId: rating.id, score },
+      body: `${result.rating.rater.name} gave you a ${score}-star rating for "${result.rating.job.title}"`,
+      data: { jobId, ratingId: result.rating.id, score: String(score) },
     });
 
-    res.status(201).json({ success: true, data: rating });
+    res.status(201).json({ success: true, data: { ...result.rating, review: result.review.text } });
 
     // Emit real-time rating event
-    try { getIO().emit('rating:new', { jobId, rating }); } catch (e) {}
+    try { getIO().emit('rating:new', { jobId, rating: result.rating }); } catch (e) {}
   } catch (error: any) {
     console.error('[Ratings] create error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -100,14 +112,14 @@ router.get('/user/:userId', async (req: Request, res: Response) => {
       where: { rateeId: req.params.userId as string },
       include: {
         rater: { select: { id: true, name: true, avatarUrl: true } },
-        job: { select: { id: true, title: true, category: true } },
+        job: { select: { id: true, title: true, categorySlug: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     const totalRatings = ratings.length;
     const averageScore = totalRatings > 0
-      ? ratings.reduce((sum, r) => sum + r.score, 0) / totalRatings
+      ? ratings.reduce((sum, r) => sum + r.overallScore, 0) / totalRatings
       : 0;
 
     res.json({

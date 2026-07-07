@@ -69,8 +69,10 @@ router.get('/modifications', async (req: Request, res: Response) => {
     ]);
 
     const withRiskFlags = items.map((item) => {
-      const priceJumpRatio = item.originalPrice > 0
-        ? (item.revisedPrice - item.originalPrice) / item.originalPrice
+      const originalPriceNum = Number(item.originalPrice);
+      const revisedPriceNum = Number(item.revisedPrice);
+      const priceJumpRatio = originalPriceNum > 0
+        ? (revisedPriceNum - originalPriceNum) / originalPriceNum
         : 0;
       const riskFlags: string[] = [];
 
@@ -86,7 +88,7 @@ router.get('/modifications', async (req: Request, res: Response) => {
         ...item,
         analytics: {
           priceJumpRatio,
-          priceDelta: item.revisedPrice - item.originalPrice,
+          priceDelta: revisedPriceNum - originalPriceNum,
           riskFlags,
         },
       };
@@ -234,20 +236,24 @@ router.post('/modifications/scan', async (_req: Request, res: Response) => {
       }
 
       const latest = job.modifications[0];
-      if (latest && latest.originalPrice > 0) {
-        const jumpRatio = (latest.revisedPrice - latest.originalPrice) / latest.originalPrice;
-        if (jumpRatio >= 0.75) {
-          flags.push({
-            jobId: job.id,
-            reason: 'Latest modification has 75%+ price jump',
-            severity: 'HIGH',
-          });
-        } else if (jumpRatio >= 0.4) {
-          flags.push({
-            jobId: job.id,
-            reason: 'Latest modification has 40%+ price jump',
-            severity: 'MEDIUM',
-          });
+      if (latest) {
+        const latestOriginalPrice = Number(latest.originalPrice);
+        const latestRevisedPrice = Number(latest.revisedPrice);
+        if (latestOriginalPrice > 0) {
+          const jumpRatio = (latestRevisedPrice - latestOriginalPrice) / latestOriginalPrice;
+          if (jumpRatio >= 0.75) {
+            flags.push({
+              jobId: job.id,
+              reason: 'Latest modification has 75%+ price jump',
+              severity: 'HIGH',
+            });
+          } else if (jumpRatio >= 0.4) {
+            flags.push({
+              jobId: job.id,
+              reason: 'Latest modification has 40%+ price jump',
+              severity: 'MEDIUM',
+            });
+          }
         }
       }
     }

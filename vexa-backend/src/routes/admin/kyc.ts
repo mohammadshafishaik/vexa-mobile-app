@@ -14,7 +14,7 @@ const parsePage = (value: unknown, fallback: number): number => {
 };
 
 const syncUserKycStatus = async (userId: string): Promise<void> => {
-  const docs = await prisma.kycDocument.findMany({
+  const docs = await prisma.kYCVerification.findMany({
     where: { userId },
     select: { status: true },
   });
@@ -22,7 +22,7 @@ const syncUserKycStatus = async (userId: string): Promise<void> => {
   if (docs.length === 0) {
     await prisma.user.update({
       where: { id: userId },
-      data: { kycStatus: 'PENDING', isVerified: false },
+      data: { kycStatus: 'NOT_STARTED', isVerified: false },
     });
     return;
   }
@@ -41,7 +41,7 @@ const syncUserKycStatus = async (userId: string): Promise<void> => {
   if (allApproved) {
     await prisma.user.update({
       where: { id: userId },
-      data: { kycStatus: 'VERIFIED', isVerified: true },
+      data: { kycStatus: 'APPROVED', isVerified: true },
     });
     return;
   }
@@ -81,7 +81,7 @@ router.get('/kyc', async (req: Request, res: Response) => {
     }
 
     const [items, total] = await Promise.all([
-      prisma.kycDocument.findMany({
+      prisma.kYCVerification.findMany({
         where,
         include: {
           user: {
@@ -94,20 +94,12 @@ router.get('/kyc', async (req: Request, res: Response) => {
               kycStatus: true,
             },
           },
-          reviewedBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              adminRole: true,
-            },
-          },
         },
         orderBy: { createdAt: 'desc' },
         skip,
         take: currentLimit,
       }),
-      prisma.kycDocument.count({ where }),
+      prisma.kYCVerification.count({ where }),
     ]);
 
     res.json({
@@ -125,7 +117,7 @@ router.get('/kyc', async (req: Request, res: Response) => {
 
 router.get('/kyc/:id', async (req: Request, res: Response) => {
   try {
-    const item = await prisma.kycDocument.findUnique({
+    const item = await prisma.kYCVerification.findUnique({
       where: { id: String(req.params.id) },
       include: {
         user: {
@@ -139,14 +131,6 @@ router.get('/kyc/:id', async (req: Request, res: Response) => {
             isVerified: true,
           },
         },
-        reviewedBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            adminRole: true,
-          },
-        },
         reviewLogs: {
           include: {
             admin: {
@@ -154,7 +138,11 @@ router.get('/kyc/:id', async (req: Request, res: Response) => {
                 id: true,
                 name: true,
                 email: true,
-                adminRole: true,
+                adminProfile: {
+                  select: {
+                    adminRole: true,
+                  },
+                },
               },
             },
           },
@@ -177,7 +165,7 @@ router.get('/kyc/:id', async (req: Request, res: Response) => {
 router.patch('/kyc/:id/approve', async (req: Request, res: Response) => {
   try {
     const { remarks } = req.body as { remarks?: string };
-    const item = await prisma.kycDocument.findUnique({ where: { id: String(req.params.id) } });
+    const item = await prisma.kYCVerification.findUnique({ where: { id: String(req.params.id) } });
 
     if (!item) {
       res.status(404).json({ success: false, message: 'KYC document not found' });
@@ -185,7 +173,7 @@ router.patch('/kyc/:id/approve', async (req: Request, res: Response) => {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const next = await tx.kycDocument.update({
+      const next = await tx.kYCVerification.update({
         where: { id: item.id },
         data: {
           status: 'APPROVED',
@@ -195,7 +183,7 @@ router.patch('/kyc/:id/approve', async (req: Request, res: Response) => {
         },
       });
 
-      await tx.kycReviewLog.create({
+      await tx.kYCReviewLog.create({
         data: {
           documentId: item.id,
           adminId: req.admin!.userId,
@@ -230,7 +218,7 @@ router.patch('/kyc/:id/approve', async (req: Request, res: Response) => {
 router.patch('/kyc/:id/reject', async (req: Request, res: Response) => {
   try {
     const { remarks } = req.body as { remarks?: string };
-    const item = await prisma.kycDocument.findUnique({ where: { id: String(req.params.id) } });
+    const item = await prisma.kYCVerification.findUnique({ where: { id: String(req.params.id) } });
 
     if (!item) {
       res.status(404).json({ success: false, message: 'KYC document not found' });
@@ -238,7 +226,7 @@ router.patch('/kyc/:id/reject', async (req: Request, res: Response) => {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const next = await tx.kycDocument.update({
+      const next = await tx.kYCVerification.update({
         where: { id: item.id },
         data: {
           status: 'REJECTED',
@@ -248,7 +236,7 @@ router.patch('/kyc/:id/reject', async (req: Request, res: Response) => {
         },
       });
 
-      await tx.kycReviewLog.create({
+      await tx.kYCReviewLog.create({
         data: {
           documentId: item.id,
           adminId: req.admin!.userId,

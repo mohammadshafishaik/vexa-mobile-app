@@ -3,6 +3,7 @@ import prisma from '../../lib/prisma';
 import { adminAuthMiddleware } from '../../middleware/admin/adminAuth';
 import { logAdminAction } from '../../utils/admin/audit';
 import { sendMulticastNotification } from '../../lib/firebase';
+import { NotificationType } from '@prisma/client';
 
 const router = Router();
 
@@ -12,14 +13,6 @@ const parsePage = (value: unknown, fallback: number): number => {
   const parsed = Number(value);
   if (Number.isNaN(parsed) || parsed <= 0) return fallback;
   return Math.floor(parsed);
-};
-
-const chunk = <T>(arr: T[], size: number): T[][] => {
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    result.push(arr.slice(i, i + size));
-  }
-  return result;
 };
 
 router.get('/notifications/campaigns', async (req: Request, res: Response) => {
@@ -63,19 +56,8 @@ router.get('/notifications/campaigns', async (req: Request, res: Response) => {
 
 router.get('/notifications/stats', async (_req: Request, res: Response) => {
   try {
-    const [total, unread, last24h] = await Promise.all([
-      prisma.notification.count(),
-      prisma.notification.count({ where: { isRead: false } }),
-      prisma.notification.count({
-        where: {
-          createdAt: {
-            gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          },
-        },
-      }),
-    ]);
-
-    res.json({ success: true, data: { total, unread, last24h } });
+    // Return empty stats since in-app notification table is deleted (FCM only)
+    res.json({ success: true, data: { total: 0, unread: 0, last24h: 0 } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -89,14 +71,12 @@ router.post('/notifications/campaigns', async (req: Request, res: Response) => {
       targetType,
       userIds,
       payload,
-      sendPush = true,
     } = req.body as {
       title?: string;
       body?: string;
       targetType?: 'ALL' | 'CUSTOMERS' | 'PROVIDERS' | 'ADMINS' | 'USER_IDS';
       userIds?: string[];
       payload?: unknown;
-      sendPush?: boolean;
     };
 
     if (!title || !body || !targetType) {
@@ -109,24 +89,27 @@ router.post('/notifications/campaigns', async (req: Request, res: Response) => {
       return;
     }
 
-    const where: any = {};
+    const userWhere: any = { deletedAt: null };
 
-    if (targetType === 'CUSTOMERS') where.role = 'CUSTOMER';
-    if (targetType === 'PROVIDERS') where.role = 'PROVIDER';
-    if (targetType === 'ADMINS') where.role = 'ADMIN';
-    if (targetType === 'USER_IDS') where.id = { in: userIds };
+    if (targetType === 'CUSTOMERS') userWhere.role = 'CUSTOMER';
+    if (targetType === 'PROVIDERS') userWhere.role = 'PROVIDER';
+    if (targetType === 'ADMINS') userWhere.role = 'ADMIN';
+    if (targetType === 'USER_IDS') userWhere.id = { in: userIds };
 
-    const recipients = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        deviceTokens: true,
+    // Fetch active push tokens for target users
+    const pushTokens = await prisma.pushToken.findMany({
+      where: {
+        isActive: true,
+        user: userWhere,
       },
-      take: 5000,
+      select: {
+        token: true,
+        userId: true,
+      },
     });
 
-    if (recipients.length === 0) {
-      res.status(400).json({ success: false, message: 'No recipients found for selected target' });
+    if (pushTokens.length === 0) {
+      res.status(400).json({ success: false, message: 'No active push tokens found for the selected target' });
       return;
     }
 
@@ -137,46 +120,36 @@ router.post('/notifications/campaigns', async (req: Request, res: Response) => {
         targetType,
         payload: (payload as any) || null,
         sentById: req.admin!.userId,
-        totalSent: 0,
+        totalSent: pushTokens.length,
         totalFailed: 0,
       },
     });
 
-    const notifications = recipients.map((recipient) => ({
-      userId: recipient.id,
-      type: 'SYSTEM' as const,
+    const targetUserIds = Array.from(new Set(pushTokens.map((pt) => pt.userId)));
+
+    // Send multicast push notifications in batches
+    const fcmData = {
+      campaignId: campaign.id,
+      ...(payload ? { payload: JSON.stringify(payload) } : {}),
+    };
+
+    const pushSuccess = await sendMulticastNotification(
+      targetUserIds,
       title,
       body,
-      data: {
-        campaignId: campaign.id,
-        payload: (payload as any) || null,
-      } as any,
-    }));
+      'SYSTEM' as NotificationType,
+      fcmData
+    );
 
-    const created = await prisma.notification.createMany({ data: notifications });
-
-    let pushSuccess = 0;
-    let pushFailed = 0;
-
-    if (sendPush) {
-      const allTokens = recipients.flatMap((recipient) => recipient.deviceTokens || []);
-      const batches = chunk(allTokens, 400);
-
-      for (const batch of batches) {
-        const successCount = await sendMulticastNotification(batch, title, body, {
-          campaignId: campaign.id,
-        });
-
-        pushSuccess += successCount;
-        pushFailed += Math.max(batch.length - successCount, 0);
-      }
-    }
+    const pushFailed = Math.max(pushTokens.length - pushSuccess, 0);
 
     const updatedCampaign = await prisma.notificationCampaign.update({
       where: { id: campaign.id },
       data: {
-        totalSent: created.count,
-        totalFailed: sendPush ? pushFailed : 0,
+        totalSent: pushTokens.length,
+        totalFailed: pushFailed,
+        sentAt: new Date(),
+        completedAt: new Date(),
       },
       include: {
         sentBy: {
@@ -197,8 +170,8 @@ router.post('/notifications/campaigns', async (req: Request, res: Response) => {
       performedById: req.admin!.userId,
       newState: {
         targetType,
-        recipientCount: recipients.length,
-        sentCount: created.count,
+        tokenCount: pushTokens.length,
+        userCount: targetUserIds.length,
         pushSuccess,
         pushFailed,
       },
@@ -209,8 +182,8 @@ router.post('/notifications/campaigns', async (req: Request, res: Response) => {
       success: true,
       data: {
         campaign: updatedCampaign,
-        recipientCount: recipients.length,
-        sentCount: created.count,
+        recipientCount: targetUserIds.length,
+        sentCount: pushTokens.length,
         pushSuccess,
         pushFailed,
       },

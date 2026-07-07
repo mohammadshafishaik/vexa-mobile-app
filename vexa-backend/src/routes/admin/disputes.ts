@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
 import { adminAuthMiddleware } from '../../middleware/admin/adminAuth';
 import { logAdminAction } from '../../utils/admin/audit';
+import { createAndPushNotification } from '../../utils/notificationHelper';
+import { sendDisputeUpdateEmail } from '../../lib/email';
 
 const router = Router();
 
@@ -135,7 +137,10 @@ router.patch('/disputes/:id/status', async (req: Request, res: Response) => {
       return;
     }
 
-    const previous = await prisma.dispute.findUnique({ where: { id: String(req.params.id) } });
+    const previous = await prisma.dispute.findUnique({
+      where: { id: String(req.params.id) },
+      include: { raisedBy: true, job: true },
+    });
     if (!previous) {
       res.status(404).json({ success: false, message: 'Dispute not found' });
       return;
@@ -159,6 +164,16 @@ router.patch('/disputes/:id/status', async (req: Request, res: Response) => {
       newState: updated,
       req,
     });
+
+    if (previous && previous.raisedBy) {
+      sendDisputeUpdateEmail(previous.raisedBy.email, {
+        name: previous.raisedBy.name,
+        jobTitle: previous.job.title,
+        orderId: previous.job.orderId,
+        disputeStatus: status,
+        updateMessage: remarks || `Dispute status updated to ${status.replace(/_/g, ' ')}`,
+      }).catch(err => console.error('Failed to send dispute update email:', err));
+    }
 
     res.json({ success: true, data: updated });
   } catch (error: any) {
@@ -222,7 +237,7 @@ router.post('/disputes/:id/decision', async (req: Request, res: Response) => {
         data: {
           disputeId: dispute.id,
           jobId: dispute.jobId,
-          decision,
+          decision: decision as any,
           refundAmount: Number.isFinite(refundAmount) ? Number(refundAmount) : null,
           remarks: remarks || null,
           resolvedById: req.admin!.userId,
@@ -262,37 +277,30 @@ router.post('/disputes/:id/decision', async (req: Request, res: Response) => {
         });
       }
 
-      await tx.notification.createMany({
-        data: [
-          {
-            userId: dispute.job.customerId,
-            type: 'DISPUTE_RESOLVED',
-            title: 'Dispute resolved',
-            body: `Dispute for ${dispute.job.title} resolved: ${decision}`,
-            data: {
-              disputeId: dispute.id,
-              jobId: dispute.jobId,
-              decision,
-            } as any,
-          },
-          ...(dispute.job.selectedProviderId
-            ? [{
-                userId: dispute.job.selectedProviderId,
-                type: 'DISPUTE_RESOLVED' as const,
-                title: 'Dispute resolved',
-                body: `Dispute for ${dispute.job.title} resolved: ${decision}`,
-                data: {
-                  disputeId: dispute.id,
-                  jobId: dispute.jobId,
-                  decision,
-                } as any,
-              }]
-            : []),
-        ],
-      });
-
       return { resolution, dispute: nextDispute };
     });
+
+    // Notify customer & provider outside the transaction
+    try {
+      await createAndPushNotification({
+        userId: dispute.job.customerId,
+        type: 'DISPUTE_RESOLVED',
+        title: 'Dispute resolved',
+        body: `Dispute for "${dispute.job.title}" resolved: ${decision}`,
+        data: { disputeId: dispute.id, jobId: dispute.jobId, decision },
+      });
+      if (dispute.job.selectedProviderId) {
+        await createAndPushNotification({
+          userId: dispute.job.selectedProviderId,
+          type: 'DISPUTE_RESOLVED',
+          title: 'Dispute resolved',
+          body: `Dispute for "${dispute.job.title}" resolved: ${decision}`,
+          data: { disputeId: dispute.id, jobId: dispute.jobId, decision },
+        });
+      }
+    } catch (e) {
+      console.error('Error sending dispute resolved notifications:', e);
+    }
 
     await logAdminAction({
       entityType: 'DISPUTE',

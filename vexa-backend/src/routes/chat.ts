@@ -3,41 +3,95 @@ import prisma from '../lib/prisma';
 import { authMiddleware } from '../middleware/auth';
 import { getIO } from '../lib/socket';
 import { createAndPushNotification } from '../utils/notificationHelper';
+import { MessageType } from '@prisma/client';
 
 const router = Router();
+
+// Helper to get or create a chat room for a job
+async function getOrCreateRoomForJob(jobId: string, userId: string) {
+  let room = await prisma.chatRoom.findUnique({
+    where: { jobId },
+    include: {
+      members: {
+        include: {
+          user: { select: { id: true, name: true, avatarUrl: true } },
+        },
+      },
+    },
+  });
+
+  if (!room) {
+    const job = await prisma.serviceRequest.findUnique({
+      where: { id: jobId },
+      select: { id: true, customerId: true, selectedProviderId: true },
+    });
+
+    if (!job || !job.selectedProviderId) return null;
+
+    if (job.customerId !== userId && job.selectedProviderId !== userId) return null;
+
+    room = await prisma.chatRoom.create({
+      data: {
+        jobId,
+        members: {
+          createMany: {
+            data: [
+              { userId: job.customerId },
+              { userId: job.selectedProviderId },
+            ],
+          },
+        },
+      },
+      include: {
+        members: {
+          include: {
+            user: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
+      },
+    });
+  }
+
+  return room;
+}
 
 // ─── GET /api/chat/conversations — list all active chats ──
 router.get('/conversations', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
 
-    // Find all jobs where the user is either customer or selected provider
-    const jobs = await prisma.serviceRequest.findMany({
+    // Find all chat rooms where user is a member
+    const rooms = await prisma.chatRoom.findMany({
       where: {
-        OR: [
-          { customerId: userId },
-          { selectedProviderId: userId },
-        ],
-        selectedProviderId: { not: null },
-        status: { notIn: ['POSTED', 'CANCELLED'] },
+        members: {
+          some: { userId },
+        },
       },
-      select: {
-        id: true,
-        title: true,
-        orderId: true,
-        status: true,
-        customerId: true,
-        selectedProviderId: true,
-        customer: { select: { id: true, name: true, avatarUrl: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true } },
-        chatMessages: {
+      include: {
+        job: {
+          select: {
+            id: true,
+            title: true,
+            orderId: true,
+            status: true,
+            customerId: true,
+            selectedProviderId: true,
+            customer: { select: { id: true, name: true, avatarUrl: true } },
+            selectedProvider: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
+        members: {
+          include: {
+            user: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
+        messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
           select: {
             content: true,
             createdAt: true,
             senderId: true,
-            isRead: true,
             messageType: true,
           },
         },
@@ -45,27 +99,38 @@ router.get('/conversations', authMiddleware, async (req: Request, res: Response)
       orderBy: { updatedAt: 'desc' },
     });
 
-    // Count unread messages per job
     const conversations = await Promise.all(
-      jobs.map(async (job) => {
-        const unreadCount = await prisma.chatMessage.count({
-          where: {
-            jobId: job.id,
-            receiverId: userId,
-            isRead: false,
-          },
-        });
+      rooms.map(async (room) => {
+        const myMember = room.members.find((m) => m.userId === userId);
+        const lastReadAt = myMember?.lastReadAt;
+        const unreadCount = lastReadAt
+          ? await prisma.chatMessage.count({
+              where: {
+                chatRoomId: room.id,
+                createdAt: { gt: lastReadAt },
+              },
+            })
+          : 0;
 
-        const otherUser = job.customerId === userId ? job.selectedProvider : job.customer;
-        const lastMessage = job.chatMessages[0] || null;
+        const otherMember = room.members.find((m) => m.userId !== userId);
+        const otherUser = otherMember?.user || null;
+        const lastMessage = room.messages[0] || null;
 
         return {
-          jobId: job.id,
-          jobTitle: job.title,
-          orderId: job.orderId,
-          jobStatus: job.status,
+          jobId: room.jobId || room.id,
+          jobTitle: room.job?.title || 'General Chat',
+          orderId: room.job?.orderId || null,
+          jobStatus: room.job?.status || 'ACTIVE',
           otherUser,
-          lastMessage,
+          lastMessage: lastMessage
+            ? {
+                content: lastMessage.content,
+                createdAt: lastMessage.createdAt,
+                senderId: lastMessage.senderId,
+                isRead: unreadCount === 0,
+                messageType: lastMessage.messageType,
+              }
+            : null,
           unreadCount,
         };
       })
@@ -92,25 +157,15 @@ router.get('/:jobId', authMiddleware, async (req: Request, res: Response) => {
     const { page = '1', limit = '50' } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Verify user is a participant in this job
-    const job = await prisma.serviceRequest.findUnique({
-      where: { id: jobId },
-      select: { customerId: true, selectedProviderId: true },
-    });
-
-    if (!job) {
-      res.status(404).json({ success: false, message: 'Job not found' });
-      return;
-    }
-
-    if (job.customerId !== userId && job.selectedProviderId !== userId) {
-      res.status(403).json({ success: false, message: 'You are not a participant in this job' });
+    const room = await getOrCreateRoomForJob(jobId, userId);
+    if (!room) {
+      res.status(404).json({ success: false, message: 'Chat room not found or not authorized' });
       return;
     }
 
     const [messages, total] = await Promise.all([
       prisma.chatMessage.findMany({
-        where: { jobId },
+        where: { chatRoomId: room.id },
         include: {
           sender: { select: { id: true, name: true, avatarUrl: true } },
         },
@@ -118,12 +173,24 @@ router.get('/:jobId', authMiddleware, async (req: Request, res: Response) => {
         skip,
         take: Number(limit),
       }),
-      prisma.chatMessage.count({ where: { jobId } }),
+      prisma.chatMessage.count({ where: { chatRoomId: room.id } }),
     ]);
+
+    // Map fields back to old style for frontend compatibility
+    const formattedMessages = messages.map((m) => ({
+      id: m.id,
+      jobId,
+      senderId: m.senderId,
+      content: m.content,
+      messageType: m.messageType,
+      imageUrl: m.mediaUrl,
+      createdAt: m.createdAt,
+      sender: m.sender,
+    }));
 
     res.json({
       success: true,
-      data: messages.reverse(), // oldest first for display
+      data: formattedMessages.reverse(), // oldest first
       total,
       page: Number(page),
       limit: Number(limit),
@@ -146,62 +213,64 @@ router.post('/:jobId', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const job = await prisma.serviceRequest.findUnique({
-      where: { id: jobId },
-      select: { customerId: true, selectedProviderId: true, title: true },
-    });
-
-    if (!job) {
-      res.status(404).json({ success: false, message: 'Job not found' });
+    const room = await getOrCreateRoomForJob(jobId, userId);
+    if (!room) {
+      res.status(404).json({ success: false, message: 'Chat room not found or not authorized' });
       return;
     }
 
-    if (job.customerId !== userId && job.selectedProviderId !== userId) {
-      res.status(403).json({ success: false, message: 'You are not a participant in this job' });
-      return;
-    }
-
-    // Determine the receiver
-    const receiverId = job.customerId === userId
-      ? job.selectedProviderId!
-      : job.customerId;
+    const otherMember = room.members.find((m) => m.userId !== userId);
+    const receiverId = otherMember?.userId;
 
     const message = await prisma.chatMessage.create({
       data: {
-        jobId,
+        chatRoomId: room.id,
         senderId: userId,
-        receiverId,
         content: content || '',
-        messageType: messageType || 'TEXT',
-        imageUrl: imageUrl || null,
+        messageType: (messageType as MessageType) || 'TEXT',
+        mediaUrl: imageUrl || null,
       },
       include: {
         sender: { select: { id: true, name: true, avatarUrl: true } },
       },
     });
 
+    const formattedMessage = {
+      id: message.id,
+      jobId,
+      senderId: message.senderId,
+      content: message.content,
+      messageType: message.messageType,
+      imageUrl: message.mediaUrl,
+      createdAt: message.createdAt,
+      sender: message.sender,
+    };
+
     // Broadcast via Socket.io
     try {
-      getIO().to(`chat:${jobId}`).emit('chat:message', message);
-      // Also send to user-specific room for notification badge
-      getIO().to(`user:${receiverId}`).emit('chat:newMessage', {
-        jobId,
-        message,
-      });
+      getIO().to(`chat:${jobId}`).emit('chat:message', formattedMessage);
+      if (receiverId) {
+        getIO().to(`user:${receiverId}`).emit('chat:newMessage', {
+          jobId,
+          message: formattedMessage,
+        });
+      }
     } catch (e) {}
 
     // Push notification to receiver
-    try {
-      await createAndPushNotification({
-        userId: receiverId,
-        type: 'NEW_MESSAGE',
-        title: `New message from ${message.sender.name}`,
-        body: messageType === 'IMAGE' ? '📷 Sent a photo' : content.substring(0, 100),
-        data: { jobId, messageId: message.id },
-      });
-    } catch (e) {}
+    if (receiverId) {
+      try {
+        await createAndPushNotification({
+          userId: receiverId,
+          type: 'NEW_MESSAGE',
+          title: `New message from ${message.sender.name}`,
+          body: messageType === 'IMAGE' ? '📷 Sent a photo' : content.substring(0, 100),
+          data: { jobId, messageId: message.id },
+        });
+      } catch (e) {}
+    }
 
-    res.status(201).json({ success: true, data: message });
+    res.status(201).json({ success: true, data: formattedMessage });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -213,19 +282,26 @@ router.patch('/:jobId/read', authMiddleware, async (req: Request, res: Response)
     const userId = req.user!.userId;
     const jobId = req.params.jobId as string;
 
-    await prisma.chatMessage.updateMany({
-      where: {
-        jobId,
-        receiverId: userId,
-        isRead: false,
-      },
-      data: { isRead: true },
+    const room = await prisma.chatRoom.findUnique({
+      where: { jobId },
     });
 
-    // Notify sender that messages were read
-    try {
-      getIO().to(`chat:${jobId}`).emit('chat:read', { jobId, readBy: userId });
-    } catch (e) {}
+    if (room) {
+      await prisma.chatRoomMember.update({
+        where: {
+          chatRoomId_userId: {
+            chatRoomId: room.id,
+            userId,
+          },
+        },
+        data: { lastReadAt: new Date() },
+      });
+
+      // Notify sender that messages were read
+      try {
+        getIO().to(`chat:${jobId}`).emit('chat:read', { jobId, readBy: userId });
+      } catch (e) {}
+    }
 
     res.json({ success: true, data: { message: 'Messages marked as read' } });
   } catch (error: any) {

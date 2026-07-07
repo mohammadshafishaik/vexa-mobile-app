@@ -32,9 +32,13 @@ router.post('/update', authMiddleware, async (req: Request, res: Response) => {
     await prisma.user.update({
       where: { id: req.user!.userId },
       data: {
-        lastLocationLat: lat,
-        lastLocationLng: lng,
-        lastLocationUpdatedAt: new Date(),
+        providerProfile: {
+          update: {
+            lastLocationLat: lat,
+            lastLocationLng: lng,
+            lastLocationUpdatedAt: new Date(),
+          },
+        },
       },
     });
 

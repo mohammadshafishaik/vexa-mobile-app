@@ -281,7 +281,7 @@ router.post('/create-order', authMiddleware, async (req: Request, res: Response)
       return;
     }
 
-    const amount = job.revisedPrice || job.originalPrice;
+    const amount = Number(job.revisedPrice || job.originalPrice);
     const amountInPaise = Math.round(amount * 100); // Razorpay expects paise
 
     console.log('[Payments] Payment details - amount:', amount, 'payerId:', req.user!.userId, 'payeeId:', job.selectedProviderId);
@@ -502,7 +502,7 @@ router.get('/history', authMiddleware, async (req: Request, res: Response) => {
         ],
       },
       include: {
-        job: { select: { id: true, title: true, category: true } },
+        job: { select: { id: true, title: true, categoryName: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -576,7 +576,7 @@ router.post('/cash', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const amount = job.revisedPrice || job.originalPrice;
+    const amount = Number(job.revisedPrice || job.originalPrice);
     const commissionBreakdown = calculateCommission(amount);
     const securityHash = crypto.createHash('sha256')
       .update(`${jobId}-${req.user!.userId}-${job.selectedProviderId}-${amount}-${Date.now()}-cash`)

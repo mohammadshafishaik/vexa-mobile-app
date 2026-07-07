@@ -14,13 +14,17 @@ router.get('/my', authMiddleware, async (req: Request, res: Response) => {
 
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      select: { availabilityStatus: true },
+      select: {
+        providerProfile: {
+          select: { availabilityStatus: true },
+        },
+      },
     });
 
     res.json({
       success: true,
       data: {
-        status: user?.availabilityStatus || 'OFFLINE',
+        status: user?.providerProfile?.availabilityStatus || 'OFFLINE',
         slots,
       },
     });
@@ -104,14 +108,26 @@ router.patch('/status', authMiddleware, async (req: Request, res: Response) => {
 
     const user = await prisma.user.update({
       where: { id: req.user!.userId },
-      data: { availabilityStatus: status },
+      data: {
+        providerProfile: {
+          update: { availabilityStatus: status as any },
+        },
+      },
       select: {
         id: true,
-        availabilityStatus: true,
+        providerProfile: {
+          select: { availabilityStatus: true },
+        },
       },
     });
 
-    res.json({ success: true, data: user });
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        availabilityStatus: user.providerProfile?.availabilityStatus || 'OFFLINE',
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -161,7 +177,11 @@ router.get('/provider/:providerId', authMiddleware, async (req: Request, res: Re
   try {
     const provider = await prisma.user.findUnique({
       where: { id: req.params.providerId as string },
-      select: { availabilityStatus: true },
+      select: {
+        providerProfile: {
+          select: { availabilityStatus: true },
+        },
+      },
     });
 
     const slots = await prisma.providerAvailability.findMany({
@@ -172,7 +192,7 @@ router.get('/provider/:providerId', authMiddleware, async (req: Request, res: Re
     res.json({
       success: true,
       data: {
-        status: provider?.availabilityStatus || 'OFFLINE',
+        status: provider?.providerProfile?.availabilityStatus || 'OFFLINE',
         slots,
       },
     });

@@ -40,13 +40,18 @@ router.post('/login', async (req: Request, res: Response) => {
         name: true,
         password: true,
         role: true,
-        adminRole: true,
         accountStatus: true,
         suspendedUntil: true,
+        adminProfile: {
+          select: {
+            id: true,
+            adminRole: true,
+          },
+        },
       },
     });
 
-    if (!adminUser || adminUser.role !== 'ADMIN' || !adminUser.adminRole) {
+    if (!adminUser || adminUser.role !== 'ADMIN' || !adminUser.adminProfile) {
       res.status(401).json({ success: false, message: 'Invalid admin credentials' });
       return;
     }
@@ -85,7 +90,7 @@ router.post('/login', async (req: Request, res: Response) => {
       userId: adminUser.id,
       email: adminUser.email,
       role: 'ADMIN',
-      adminRole: adminUser.adminRole,
+      adminRole: adminUser.adminProfile.adminRole as any,
       sessionId,
     };
 
@@ -95,7 +100,7 @@ router.post('/login', async (req: Request, res: Response) => {
     await prisma.adminSession.create({
       data: {
         id: sessionId,
-        adminId: adminUser.id,
+        adminProfileId: adminUser.adminProfile.id,
         refreshTokenHash: hashToken(refreshToken),
         ipAddress: req.ip || null,
         userAgent: req.headers['user-agent'] || null,
@@ -119,7 +124,7 @@ router.post('/login', async (req: Request, res: Response) => {
           id: adminUser.id,
           email: adminUser.email,
           name: adminUser.name,
-          adminRole: adminUser.adminRole,
+          adminRole: adminUser.adminProfile.adminRole,
           accountStatus: adminUser.accountStatus,
         },
         tokens: {
@@ -149,7 +154,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
       where: { id: decoded.sessionId },
       select: {
         id: true,
-        adminId: true,
+        adminProfileId: true,
         refreshTokenHash: true,
         expiresAt: true,
         revokedAt: true,
@@ -158,7 +163,6 @@ router.post('/refresh', async (req: Request, res: Response) => {
 
     if (
       !existingSession
-      || existingSession.adminId !== decoded.userId
       || existingSession.refreshTokenHash !== refreshHash
       || !!existingSession.revokedAt
       || existingSession.expiresAt <= new Date()
@@ -173,12 +177,17 @@ router.post('/refresh', async (req: Request, res: Response) => {
         id: true,
         email: true,
         role: true,
-        adminRole: true,
         accountStatus: true,
+        adminProfile: {
+          select: {
+            id: true,
+            adminRole: true,
+          },
+        },
       },
     });
 
-    if (!adminUser || adminUser.role !== 'ADMIN' || !adminUser.adminRole || adminUser.accountStatus !== 'ACTIVE') {
+    if (!adminUser || adminUser.role !== 'ADMIN' || !adminUser.adminProfile || adminUser.accountStatus !== 'ACTIVE' || adminUser.adminProfile.id !== existingSession.adminProfileId) {
       res.status(403).json({ success: false, message: 'Admin account is not active' });
       return;
     }
@@ -188,7 +197,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
       userId: adminUser.id,
       email: adminUser.email,
       role: 'ADMIN',
-      adminRole: adminUser.adminRole,
+      adminRole: adminUser.adminProfile.adminRole as any,
       sessionId: newSessionId,
     };
 
@@ -203,7 +212,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
       prisma.adminSession.create({
         data: {
           id: newSessionId,
-          adminId: adminUser.id,
+          adminProfileId: adminUser.adminProfile.id,
           refreshTokenHash: hashToken(nextRefreshToken),
           ipAddress: req.ip || null,
           userAgent: req.headers['user-agent'] || null,
@@ -230,7 +239,9 @@ router.post('/logout', adminAuthMiddleware, async (req: Request, res: Response) 
       await prisma.adminSession.updateMany({
         where: {
           id: req.admin.sessionId,
-          adminId: req.admin.userId,
+          adminProfile: {
+            userId: req.admin.userId,
+          },
           revokedAt: null,
         },
         data: { revokedAt: new Date() },
@@ -260,10 +271,14 @@ router.get('/me', adminAuthMiddleware, async (req: Request, res: Response) => {
         email: true,
         name: true,
         role: true,
-        adminRole: true,
         accountStatus: true,
         createdAt: true,
         updatedAt: true,
+        adminProfile: {
+          select: {
+            adminRole: true,
+          },
+        },
       },
     });
 
@@ -272,7 +287,18 @@ router.get('/me', adminAuthMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data: admin });
+    const formattedAdmin = {
+      id: admin.id,
+      email: admin.email,
+      name: admin.name,
+      role: admin.role,
+      adminRole: admin.adminProfile?.adminRole || null,
+      accountStatus: admin.accountStatus,
+      createdAt: admin.createdAt,
+      updatedAt: admin.updatedAt,
+    };
+
+    res.json({ success: true, data: formattedAdmin });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

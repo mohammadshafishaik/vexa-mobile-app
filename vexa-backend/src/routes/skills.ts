@@ -15,7 +15,7 @@ router.get('/my', authMiddleware, async (req: Request, res: Response) => {
   try {
     const skills = await prisma.providerSkill.findMany({
       where: { providerId: req.user!.userId },
-      orderBy: { category: 'asc' },
+      orderBy: { categoryName: 'asc' },
     });
 
     res.json({ success: true, data: skills });
@@ -29,7 +29,7 @@ router.get('/provider/:providerId', authMiddleware, async (req: Request, res: Re
   try {
     const skills = await prisma.providerSkill.findMany({
       where: { providerId: req.params.providerId as string },
-      orderBy: { category: 'asc' },
+      orderBy: { categoryName: 'asc' },
     });
 
     res.json({ success: true, data: skills });
@@ -66,9 +66,9 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     // Check if skill already exists
     const existing = await prisma.providerSkill.findUnique({
       where: {
-        providerId_category: {
+        providerId_categoryName: {
           providerId: req.user!.userId,
-          category: normalizedCategory,
+          categoryName: normalizedCategory,
         },
       },
     });
@@ -86,7 +86,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     const skill = await prisma.providerSkill.create({
       data: {
         providerId: req.user!.userId,
-        category: normalizedCategory,
+        categoryName: normalizedCategory,
         experienceYears: Number(experienceYears) || 0,
       },
     });
@@ -115,10 +115,10 @@ router.post('/bulk', authMiddleware, async (req: Request, res: Response) => {
     // Validate all categories
     const validated = skills
       .map((s: any) => ({
-        category: normalizeServiceCategory(s.category),
+        categoryName: normalizeServiceCategory(s.category),
         experienceYears: Number(s.experienceYears) || 0,
       }))
-      .filter((s) => AVAILABLE_SERVICE_CATEGORIES.includes(s.category as any));
+      .filter((s) => AVAILABLE_SERVICE_CATEGORIES.includes(s.categoryName as any));
 
     if (validated.length === 0) {
       res.status(400).json({ success: false, message: 'No valid skills provided' });
@@ -134,14 +134,14 @@ router.post('/bulk', authMiddleware, async (req: Request, res: Response) => {
       await tx.providerSkill.createMany({
         data: validated.map((s) => ({
           providerId: req.user!.userId,
-          category: s.category,
+          categoryName: s.categoryName,
           experienceYears: s.experienceYears,
         })),
       });
 
       return tx.providerSkill.findMany({
         where: { providerId: req.user!.userId },
-        orderBy: { category: 'asc' },
+        orderBy: { categoryName: 'asc' },
       });
     });
 

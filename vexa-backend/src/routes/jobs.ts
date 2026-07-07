@@ -2,22 +2,23 @@ import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authMiddleware } from '../middleware/auth';
 import { getIO } from '../lib/socket';
+import { sendJobPostedEmail } from '../lib/email';
 
 const router = Router();
 
 const CATEGORY_MIN_PRICE: Record<string, number> = {
-  plumbing: 300,
-  electrical: 300,
-  cleaning: 250,
-  painting: 400,
-  carpentry: 350,
-  'appliance repair': 350,
-  'ac service': 400,
-  'pest control': 450,
-  other: 250,
+  plumbing: 150,
+  electrical: 150,
+  cleaning: 100,
+  painting: 200,
+  carpentry: 150,
+  'appliance repair': 150,
+  'ac service': 200,
+  'pest control': 200,
+  other: 100,
 };
 
-const DEFAULT_MIN_PRICE = 250;
+const DEFAULT_MIN_PRICE = 100;
 
 const getMinimumPriceForCategory = (category: string): number => {
   const key = String(category || '').trim().toLowerCase();
@@ -80,14 +81,14 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       // Get provider's registered skills
       const providerSkills = await prisma.providerSkill.findMany({
         where: { providerId: userId },
-        select: { category: true },
+        select: { categoryName: true },
       });
-      const skillCategories = providerSkills.map((s) => s.category);
+      const skillCategories = providerSkills.map((s) => s.categoryName);
 
       // Providers see POSTED/BIDDING jobs matching their skills, or jobs assigned to them
       if (skillCategories.length > 0) {
         const categoryFilters = skillCategories.map((skillCategory) => ({
-          category: { equals: skillCategory, mode: 'insensitive' as const },
+          categorySlug: { equals: skillCategory, mode: 'insensitive' as const },
         }));
 
         where.OR = [
@@ -107,7 +108,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     }
 
     if (status) where.status = status;
-    if (category) where.category = { equals: String(category), mode: 'insensitive' };
+    if (category) where.categorySlug = { equals: String(category), mode: 'insensitive' };
 
     // Price range filters
     if (minPrice || maxPrice) {
@@ -125,9 +126,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       prisma.serviceRequest.findMany({
         where,
         include: {
-          customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
-          selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
-          bids: { include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } } } },
+          customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+          selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+          bids: { include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } } } },
           modifications: true,
         },
         orderBy,
@@ -174,6 +175,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     const sanitizedJobs = filteredJobs.map((job) => ({
       ...job,
       description: sanitizeJobDescription(job.description),
+      category: job.categorySlug, // Map categorySlug to category for client compatibility
     }));
 
     res.json({
@@ -218,7 +220,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         customerId: req.user!.userId,
         title,
         description: cleanedDescription,
-        category,
+        categorySlug: category,
         location,
         latitude: latitude || null,
         longitude: longitude || null,
@@ -228,14 +230,30 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         status: 'BIDDING',
       },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
       },
     });
 
-    // Broadcast new job to all connected clients
-    try { getIO().emit('job:new', job); } catch (e) {}
+    const jobFormatted = {
+      ...job,
+      category: job.categorySlug,
+    };
 
-    res.status(201).json({ success: true, data: job });
+    // Broadcast new job to all connected clients
+    try { getIO().emit('job:new', jobFormatted); } catch (e) {}
+
+    // Send job posted email to customer
+    if (job.customer?.email) {
+      sendJobPostedEmail(job.customer.email, {
+        name: job.customer.name,
+        jobTitle: job.title,
+        orderId: job.orderId,
+        category: job.categorySlug || 'General',
+        location: job.location,
+      }).catch(err => console.error('Failed to send job posted email:', err));
+    }
+
+    res.status(201).json({ success: true, data: jobFormatted });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -247,10 +265,10 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
     const job = await prisma.serviceRequest.findUnique({
       where: { id: req.params.id as string },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
         bids: {
-          include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } } },
+          include: { provider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } } },
           orderBy: { amount: 'asc' },
         },
         modifications: { orderBy: { createdAt: 'desc' } },
@@ -269,6 +287,7 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
       data: {
         ...job,
         description: sanitizeJobDescription(job.description),
+        category: job.categorySlug,
       },
     });
   } catch (error: any) {
@@ -289,21 +308,24 @@ router.patch('/:id/status', authMiddleware, async (req: Request, res: Response) 
       where: { id: req.params.id as string },
       data: { status },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
       },
     });
 
-    // Broadcast status change
-    try { getIO().emit('job:statusChange', { jobId: req.params.id, status, job }); } catch (e) {}
+    const jobFormatted = {
+      ...job,
+      category: job.categorySlug,
+    };
 
-    res.json({ success: true, data: job });
+    // Broadcast status change
+    try { getIO().emit('job:statusChange', { jobId: req.params.id, status, job: jobFormatted }); } catch (e) {}
+
+    res.json({ success: true, data: jobFormatted });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
-
-
 
 // ─── PATCH /api/jobs/:id/complete ──────────────────
 // Provider marks job as completed and uploads completion photos
@@ -333,10 +355,15 @@ router.patch('/:id/complete', authMiddleware, async (req: Request, res: Response
         completedImages: completedImages || [],
       },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
       },
     });
+
+    const updatedFormatted = {
+      ...updated,
+      category: updated.categorySlug,
+    };
 
     // Notify customer
     try {
@@ -350,9 +377,9 @@ router.patch('/:id/complete', authMiddleware, async (req: Request, res: Response
       });
     } catch (e) {}
 
-    try { getIO().emit('job:statusChange', { jobId, status: 'COMPLETED', job: updated }); } catch (e) {}
+    try { getIO().emit('job:statusChange', { jobId, status: 'COMPLETED', job: updatedFormatted }); } catch (e) {}
 
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: updatedFormatted });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -382,10 +409,15 @@ router.patch('/:id/accept-work', authMiddleware, async (req: Request, res: Respo
       where: { id: jobId },
       data: { status: 'PAYMENT_PENDING' },
       include: {
-        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
-        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, kycStatus: true, createdAt: true, updatedAt: true } },
+        customer: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
+        selectedProvider: { select: { id: true, name: true, avatarUrl: true, phone: true, role: true, email: true, isVerified: true, createdAt: true, updatedAt: true } },
       },
     });
+
+    const updatedFormatted = {
+      ...updated,
+      category: updated.categorySlug,
+    };
 
     // Notify provider
     if (job.selectedProviderId) {
@@ -401,13 +433,12 @@ router.patch('/:id/accept-work', authMiddleware, async (req: Request, res: Respo
       } catch (e) {}
     }
 
-    try { getIO().emit('job:statusChange', { jobId, status: 'PAYMENT_PENDING', job: updated }); } catch (e) {}
+    try { getIO().emit('job:statusChange', { jobId, status: 'PAYMENT_PENDING', job: updatedFormatted }); } catch (e) {}
 
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: updatedFormatted });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
 export default router;
-

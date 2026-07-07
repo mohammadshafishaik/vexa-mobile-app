@@ -23,7 +23,7 @@ router.get('/ratings', async (req: Request, res: Response) => {
 
     const where: any = {};
 
-    if (score) where.score = Number(score);
+    if (score) where.overallScore = Number(score);
     if (raterId) where.raterId = String(raterId);
     if (rateeId) where.rateeId = String(rateeId);
     if (jobId) where.jobId = String(jobId);
@@ -31,7 +31,6 @@ router.get('/ratings', async (req: Request, res: Response) => {
     if (search && String(search).trim()) {
       const term = String(search).trim();
       where.OR = [
-        { review: { contains: term, mode: 'insensitive' } },
         { job: { title: { contains: term, mode: 'insensitive' } } },
         { rater: { name: { contains: term, mode: 'insensitive' } } },
         { ratee: { name: { contains: term, mode: 'insensitive' } } },
@@ -47,7 +46,6 @@ router.get('/ratings', async (req: Request, res: Response) => {
               id: true,
               orderId: true,
               title: true,
-              category: true,
               status: true,
             },
           },
@@ -77,9 +75,23 @@ router.get('/ratings', async (req: Request, res: Response) => {
       prisma.rating.count({ where }),
     ]);
 
+    // Fetch corresponding reviews in memory for admin display
+    const ratingsWithReviews = await Promise.all(
+      items.map(async (item) => {
+        const review = await prisma.review.findFirst({
+          where: { jobId: item.jobId, authorId: item.raterId },
+          select: { text: true },
+        });
+        return {
+          ...item,
+          review: review?.text || '',
+        };
+      })
+    );
+
     res.json({
       success: true,
-      data: items,
+      data: ratingsWithReviews,
       total,
       page: currentPage,
       limit: currentLimit,
@@ -94,14 +106,14 @@ router.get('/ratings/overview', async (_req: Request, res: Response) => {
   try {
     const [totalRatings, avgScoreResult, scoreDistribution, lowScoreRecent] = await Promise.all([
       prisma.rating.count(),
-      prisma.rating.aggregate({ _avg: { score: true } }),
+      prisma.rating.aggregate({ _avg: { overallScore: true } }),
       prisma.rating.groupBy({
-        by: ['score'],
-        _count: { score: true },
-        orderBy: { score: 'asc' },
+        by: ['overallScore'],
+        _count: { overallScore: true },
+        orderBy: { overallScore: 'asc' },
       }),
       prisma.rating.findMany({
-        where: { score: { lte: 2 } },
+        where: { overallScore: { lte: 2 } },
         include: {
           job: { select: { id: true, orderId: true, title: true } },
           rater: { select: { id: true, name: true, email: true } },
@@ -112,12 +124,17 @@ router.get('/ratings/overview', async (_req: Request, res: Response) => {
       }),
     ]);
 
+    const formattedDistribution = scoreDistribution.map((group) => ({
+      score: group.overallScore,
+      count: group._count.overallScore,
+    }));
+
     res.json({
       success: true,
       data: {
         totalRatings,
-        averageScore: avgScoreResult._avg.score || 0,
-        scoreDistribution,
+        averageScore: avgScoreResult._avg.overallScore || 0,
+        scoreDistribution: formattedDistribution,
         lowScoreRecent,
       },
     });
@@ -147,7 +164,18 @@ router.get('/ratings/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data: rating });
+    const review = await prisma.review.findFirst({
+      where: { jobId: rating.jobId, authorId: rating.raterId },
+      select: { text: true },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...rating,
+        review: review?.text || '',
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -176,10 +204,16 @@ router.patch('/ratings/:id', async (req: Request, res: Response) => {
     const updated = await prisma.rating.update({
       where: { id: String(req.params.id) },
       data: {
-        review: review !== undefined ? review : existing.review,
-        score: score !== undefined ? score : existing.score,
+        overallScore: score !== undefined ? score : existing.overallScore,
       },
     });
+
+    if (review !== undefined) {
+      await prisma.review.updateMany({
+        where: { jobId: existing.jobId, authorId: existing.raterId },
+        data: { text: review },
+      });
+    }
 
     await logAdminAction({
       entityType: 'RATING',
@@ -191,7 +225,7 @@ router.patch('/ratings/:id', async (req: Request, res: Response) => {
       req,
     });
 
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: { ...updated, review } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -205,7 +239,10 @@ router.delete('/ratings/:id', requireAdminRole(['SUPER_ADMIN']), async (req: Req
       return;
     }
 
-    await prisma.rating.delete({ where: { id: String(req.params.id) } });
+    await prisma.$transaction([
+      prisma.rating.delete({ where: { id: String(req.params.id) } }),
+      prisma.review.deleteMany({ where: { jobId: existing.jobId, authorId: existing.raterId } }),
+    ]);
 
     await logAdminAction({
       entityType: 'RATING',

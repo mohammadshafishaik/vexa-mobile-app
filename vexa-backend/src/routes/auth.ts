@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import prisma from '../lib/prisma';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { authMiddleware } from '../middleware/auth';
-import { sendPasswordResetEmail, isEmailConfigured } from '../lib/email';
+import { sendPasswordResetEmail, isEmailConfigured, sendWelcomeEmail, sendLoginOtpEmail } from '../lib/email';
+import { captchaMiddleware, isCaptchaConfigured, generateSvgCaptcha } from '../lib/captcha';
 import { getAccountAccessBlock, shouldAutoReactivateSuspendedAccount } from '../utils/accountStatus';
 import { AVAILABLE_SERVICE_CATEGORIES, normalizeServiceCategory } from '../utils/serviceCategories';
 import {
@@ -26,17 +27,25 @@ const authUserSelect = {
   googleId: true,
   avatarUrl: true,
   phone: true,
-  bio: true,
-  availabilityStatus: true,
   role: true,
   accountStatus: true,
   suspendedUntil: true,
   banReason: true,
   isVerified: true,
-  kycStatus: true,
-  kycDocuments: true,
   createdAt: true,
   updatedAt: true,
+  providerProfile: {
+    select: {
+      bio: true,
+      availabilityStatus: true,
+    }
+  },
+  kycVerifications: {
+    select: {
+      status: true,
+      fileUrl: true,
+    }
+  }
 } as const;
 
 const toPublicUser = (user: any) => ({
@@ -45,12 +54,12 @@ const toPublicUser = (user: any) => ({
   name: user.name,
   avatarUrl: user.avatarUrl,
   phone: user.phone,
-  bio: user.bio,
-  availabilityStatus: user.availabilityStatus,
+  bio: user.providerProfile?.bio || null,
+  availabilityStatus: user.providerProfile?.availabilityStatus || 'OFFLINE',
   role: user.role,
   isVerified: user.isVerified,
-  kycStatus: user.kycStatus,
-  kycDocuments: user.kycDocuments,
+  kycStatus: user.kycVerifications?.[0]?.status || 'PENDING',
+  kycDocuments: user.kycVerifications?.map((doc: any) => doc.fileUrl) || [],
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
@@ -58,7 +67,7 @@ const toPublicUser = (user: any) => ({
 const ensureAccountAccess = async (
   user: {
     id: string;
-    accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
+    accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DEACTIVATED' | 'DELETED';
     suspendedUntil?: Date | null;
     banReason?: string | null;
   },
@@ -120,8 +129,32 @@ const createUserCompat = async (data: {
   isVerified?: boolean;
 }) => {
   try {
+    const { role, ...userData } = data;
+    const createData: any = {
+      ...userData,
+      role,
+    };
+
+    if (role === 'CUSTOMER') {
+      createData.customerProfile = {
+        create: {}
+      };
+    } else if (role === 'PROVIDER') {
+      createData.providerProfile = {
+        create: {
+          availabilityStatus: 'OFFLINE'
+        }
+      };
+    } else if (role === 'ADMIN') {
+      createData.adminProfile = {
+        create: {
+          adminRole: 'MODERATOR'
+        }
+      };
+    }
+
     return await prisma.user.create({
-      data,
+      data: createData,
       select: authUserSelect,
     });
   } catch (error: any) {
@@ -193,7 +226,19 @@ const createUserCompat = async (data: {
 };
 
 // ─── POST /api/auth/register ───────────────────────────
-router.post('/register', async (req: Request, res: Response) => {
+router.get('/captcha-image', (req: Request, res: Response) => {
+  const captcha = generateSvgCaptcha();
+  res.json({
+    success: true,
+    data: {
+      id: captcha.id,
+      svg: captcha.svg,
+    },
+  });
+});
+
+// ─── POST /api/auth/register ───────────────────────────
+router.post('/register', captchaMiddleware('register'), async (req: Request, res: Response) => {
   try {
     const { email, name, phone, role, password, initialSkills } = req.body;
 
@@ -252,7 +297,7 @@ router.post('/register', async (req: Request, res: Response) => {
       await prisma.providerSkill.createMany({
         data: normalizedProviderSkills.map((category: string) => ({
           providerId: user.id,
-          category,
+          categoryName: category,
           experienceYears: 0,
         })),
         skipDuplicates: true,
@@ -264,6 +309,10 @@ router.post('/register', async (req: Request, res: Response) => {
     const refreshToken = generateRefreshToken(tokenPayload);
 
     const userWithoutPassword = toPublicUser(user);
+
+    sendWelcomeEmail(user.email, user.name).catch((err) =>
+      console.error('Failed to send welcome email:', err)
+    );
 
     res.status(201).json({
       success: true,
@@ -280,7 +329,7 @@ router.post('/register', async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/auth/login ──────────────────────────────
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', captchaMiddleware('login'), async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
@@ -340,6 +389,135 @@ router.post('/login', async (req: Request, res: Response) => {
     console.error('Login error:', error);
     const errorCode = error?.code ? ` (${error.code})` : '';
     res.status(500).json({ success: false, message: `Login failed. Please try again${errorCode}.` });
+  }
+});
+// ─── POST /api/auth/otp/send ───────────────────────────
+router.post('/otp/send', captchaMiddleware('otp_send'), async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({ success: false, message: 'Email is required' });
+      return;
+    }
+
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      res.status(400).json({ success: false, message: 'Invalid email format' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      select: { id: true, email: true, name: true, role: true, accountStatus: true },
+    });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'This email is not registered. Please register first.',
+      });
+      return;
+    }
+
+    if (!await ensureAccountAccess(user, res)) {
+      return;
+    }
+
+    // Generate 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const identifier = `otp:email:${email.trim().toLowerCase()}`;
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
+
+    await prisma.verification.upsert({
+      where: { id: identifier },
+      create: {
+        id: identifier,
+        identifier,
+        value: otpCode,
+        expiresAt,
+      },
+      update: {
+        value: otpCode,
+        expiresAt,
+      },
+    });
+
+    // Send email
+    sendLoginOtpEmail(user.email, user.name, otpCode).catch((err) =>
+      console.error('[Email] Failed to send login OTP:', err)
+    );
+
+    res.json({
+      success: true,
+      message: 'One-Time Password (OTP) has been sent to your email address.',
+    });
+  } catch (error: any) {
+    console.error('OTP Send error:', error);
+    res.status(500).json({ success: false, message: 'Failed to send OTP' });
+  }
+});
+
+// ─── POST /api/auth/otp/verify ─────────────────────────
+router.post('/otp/verify', async (req: Request, res: Response) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      res.status(400).json({ success: false, message: 'Email and OTP code are required' });
+      return;
+    }
+
+    const identifier = `otp:email:${email.trim().toLowerCase()}`;
+    const verification = await prisma.verification.findUnique({
+      where: { id: identifier },
+    });
+
+    if (!verification || verification.value !== otp) {
+      res.status(400).json({ success: false, message: 'Invalid OTP code' });
+      return;
+    }
+
+    if (new Date() > verification.expiresAt) {
+      res.status(400).json({ success: false, message: 'OTP code has expired' });
+      return;
+    }
+
+    // OTP is valid; delete verification token to prevent replay attacks
+    await prisma.verification.delete({
+      where: { id: identifier },
+    }).catch(() => {});
+
+    const user = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      select: authUserSelect,
+    });
+
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    if (!await ensureAccountAccess(user, res)) {
+      return;
+    }
+
+    const tokenPayload = { userId: user.id, email: user.email, role: user.role };
+    const accessToken = generateAccessToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+
+    const userWithoutPassword = toPublicUser(user);
+
+    res.json({
+      success: true,
+      data: {
+        user: userWithoutPassword,
+        tokens: { accessToken, refreshToken },
+      },
+    });
+  } catch (error: any) {
+    console.error('OTP Verify error:', error);
+    res.status(500).json({ success: false, message: 'Failed to verify OTP' });
   }
 });
 
@@ -414,7 +592,7 @@ router.post('/google', async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/auth/forgot-password ────────────────────
-router.post('/forgot-password', async (req: Request, res: Response) => {
+router.post('/forgot-password', captchaMiddleware('forgot_password'), async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
 
@@ -622,10 +800,21 @@ router.get('/profile', authMiddleware, async (req: Request, res: Response) => {
       where: { id: req.user!.userId },
       select: {
         id: true, email: true, name: true, avatarUrl: true,
-        phone: true, bio: true, availabilityStatus: true,
-        role: true, isVerified: true,
-        kycStatus: true, kycDocuments: true, password: true,
+        phone: true, role: true, isVerified: true,
+        password: true,
         createdAt: true, updatedAt: true,
+        providerProfile: {
+          select: {
+            bio: true,
+            availabilityStatus: true,
+          }
+        },
+        kycVerifications: {
+          select: {
+            status: true,
+            fileUrl: true,
+          }
+        }
       },
     });
 
@@ -635,7 +824,7 @@ router.get('/profile', authMiddleware, async (req: Request, res: Response) => {
     }
 
     const { password, ...publicUser } = user;
-    res.json({ success: true, data: { ...publicUser, hasPassword: !!password } });
+    res.json({ success: true, data: { ...toPublicUser(publicUser), hasPassword: !!password } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -681,7 +870,12 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
     }
 
     if (bio !== undefined) {
-      updateData.bio = typeof bio === 'string' ? bio.trim() || null : null;
+      updateData.providerProfile = {
+        upsert: {
+          create: { bio: typeof bio === 'string' ? bio.trim() || null : null },
+          update: { bio: typeof bio === 'string' ? bio.trim() || null : null },
+        }
+      };
     }
 
     const user = await prisma.user.update({
@@ -689,14 +883,24 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
       data: updateData,
       select: {
         id: true, email: true, name: true, avatarUrl: true,
-        phone: true, bio: true, availabilityStatus: true,
-        role: true, isVerified: true,
-        kycStatus: true, kycDocuments: true,
+        phone: true, role: true, isVerified: true,
         createdAt: true, updatedAt: true,
+        providerProfile: {
+          select: {
+            bio: true,
+            availabilityStatus: true,
+          }
+        },
+        kycVerifications: {
+          select: {
+            status: true,
+            fileUrl: true,
+          }
+        }
       },
     });
 
-    res.json({ success: true, data: user });
+    res.json({ success: true, data: toPublicUser(user) });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -793,24 +997,24 @@ router.get('/stats', authMiddleware, async (req: Request, res: Response) => {
       ]);
       const ratingAgg = await prisma.rating.aggregate({
         where: { rateeId: userId },
-        _avg: { score: true },
+        _avg: { overallScore: true },
         _count: true,
       });
-      avgRating = ratingAgg._avg.score || 0;
+      avgRating = ratingAgg._avg.overallScore || 0;
       reviewCount = ratingAgg._count || 0;
     } else {
       const [bidCount, ratingAgg] = await Promise.all([
         prisma.bid.count({ where: { providerId: userId } }),
         prisma.rating.aggregate({
           where: { rateeId: userId },
-          _avg: { score: true },
+          _avg: { overallScore: true },
           _count: true,
         }),
       ]);
       jobCount = await prisma.serviceRequest.count({
         where: { selectedProviderId: userId },
       });
-      avgRating = ratingAgg._avg.score || 0;
+      avgRating = ratingAgg._avg.overallScore || 0;
       reviewCount = ratingAgg._count || 0;
     }
 

@@ -43,7 +43,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     let effectiveStatus = user.accountStatus;
     let effectiveSuspendedUntil = user.suspendedUntil;
 
-    if (shouldAutoReactivateSuspendedAccount(user)) {
+    if (shouldAutoReactivateSuspendedAccount(user as any)) {
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -58,7 +58,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     }
 
     const accessBlock = getAccountAccessBlock({
-      accountStatus: effectiveStatus,
+      accountStatus: effectiveStatus as any,
       suspendedUntil: effectiveSuspendedUntil,
       banReason: user.banReason,
     });

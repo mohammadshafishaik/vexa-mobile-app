@@ -25,7 +25,7 @@ router.get('/bidding/active-jobs', async (_req: Request, res: Response) => {
     });
 
     const enriched = jobs.map((job) => {
-      const amounts = job.bids.map((bid) => bid.amount);
+      const amounts = job.bids.map((bid) => Number(bid.amount));
       const minBid = amounts.length ? Math.min(...amounts) : null;
       const maxBid = amounts.length ? Math.max(...amounts) : null;
       return {
@@ -193,7 +193,7 @@ router.post('/bidding/anomalies/scan', async (_req: Request, res: Response) => {
     for (const job of activeJobs) {
       if (job.bids.length < 2) continue;
 
-      const amounts = job.bids.map((bid) => bid.amount).sort((a, b) => a - b);
+      const amounts = job.bids.map((bid) => Number(bid.amount)).sort((a, b) => a - b);
       const lowest = amounts[0];
       const median = amounts[Math.floor(amounts.length / 2)];
 
@@ -202,7 +202,7 @@ router.post('/bidding/anomalies/scan', async (_req: Request, res: Response) => {
           where: {
             jobId: job.id,
             anomalyType: 'EXTREME_UNDERCUT',
-            status: { in: ['OPEN', 'REVIEWED'] },
+            status: { in: ['OPEN', 'REVIEWED'] as any },
           },
           select: { id: true },
         });
@@ -238,7 +238,7 @@ router.post('/bidding/anomalies/scan', async (_req: Request, res: Response) => {
           where: {
             jobId: job.id,
             anomalyType: 'COLLUSION_PATTERN',
-            status: { in: ['OPEN', 'REVIEWED'] },
+            status: { in: ['OPEN', 'REVIEWED'] as any },
           },
           select: { id: true },
         });
@@ -290,7 +290,7 @@ router.patch('/bidding/anomalies/:id/status', async (req: Request, res: Response
     const updated = await prisma.bidAnomaly.update({
       where: { id: String(req.params.id) },
       data: {
-        status,
+        status: status as any,
         reviewedById: req.admin!.userId,
         reviewedAt: new Date(),
         metadata: {
