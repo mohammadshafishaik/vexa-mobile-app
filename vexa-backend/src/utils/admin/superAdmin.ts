@@ -1,4 +1,3 @@
-// @ts-nocheck
 import bcrypt from 'bcryptjs';
 import prisma from '../../lib/prisma';
 
@@ -40,7 +39,12 @@ export const upsertSuperAdmin = async (values?: Partial<UpsertSuperAdminInput>) 
       name,
       password: passwordHash,
       role: 'ADMIN',
-      adminRole: 'SUPER_ADMIN',
+      adminProfile: {
+        upsert: {
+          create: { adminRole: 'SUPER_ADMIN' },
+          update: { adminRole: 'SUPER_ADMIN' }
+        }
+      },
       accountStatus: 'ACTIVE',
       isVerified: true,
       emailVerified: true,
@@ -54,7 +58,9 @@ export const upsertSuperAdmin = async (values?: Partial<UpsertSuperAdminInput>) 
       name,
       password: passwordHash,
       role: 'ADMIN',
-      adminRole: 'SUPER_ADMIN',
+      adminProfile: {
+        create: { adminRole: 'SUPER_ADMIN' }
+      },
       accountStatus: 'ACTIVE',
       isVerified: true,
       emailVerified: true,
@@ -64,7 +70,9 @@ export const upsertSuperAdmin = async (values?: Partial<UpsertSuperAdminInput>) 
       email: true,
       name: true,
       role: true,
-      adminRole: true,
+      adminProfile: {
+        select: { adminRole: true }
+      },
       accountStatus: true,
     },
   });
