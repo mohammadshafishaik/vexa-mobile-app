@@ -502,14 +502,25 @@ router.get('/history', authMiddleware, async (req: Request, res: Response) => {
         ],
       },
       include: {
-        job: { select: { id: true, title: true, categoryName: true } },
+        job: { select: { id: true, title: true, categorySlug: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip,
       take: Number(limit),
     });
 
-    res.json({ success: true, data: payments });
+    const mappedPayments = payments.map((p) => {
+      const job = p.job ? {
+        ...p.job,
+        categoryName: p.job.categorySlug || 'General',
+      } : null;
+      return {
+        ...p,
+        job,
+      };
+    });
+
+    res.json({ success: true, data: mappedPayments });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

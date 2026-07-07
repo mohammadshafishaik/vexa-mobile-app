@@ -96,7 +96,7 @@ const bootstrapAdminFromEnv = async (): Promise<void> => {
   }
 
   const admin = await upsertSuperAdmin({ email, password, name });
-  console.log(`✅ Admin bootstrap ready: ${admin.email} (${admin.adminRole})`);
+  console.log(`✅ Admin bootstrap ready: ${admin.email} (${admin.adminProfile?.adminRole})`);
 };
 
 const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {

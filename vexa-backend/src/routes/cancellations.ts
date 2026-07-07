@@ -169,7 +169,7 @@ router.get('/history/my', authMiddleware, async (req: Request, res: Response) =>
       prisma.cancellation.findMany({
         where: { cancelledById: req.user!.userId },
         include: {
-          job: { select: { id: true, title: true, orderId: true, categoryName: true } },
+          job: { select: { id: true, title: true, orderId: true, categorySlug: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -178,9 +178,20 @@ router.get('/history/my', authMiddleware, async (req: Request, res: Response) =>
       prisma.cancellation.count({ where: { cancelledById: req.user!.userId } }),
     ]);
 
+    const mappedCancellations = cancellations.map((c) => {
+      const job = c.job ? {
+        ...c.job,
+        categoryName: c.job.categorySlug || 'General',
+      } : null;
+      return {
+        ...c,
+        job,
+      };
+    });
+
     res.json({
       success: true,
-      data: cancellations,
+      data: mappedCancellations,
       total,
       page: Number(page),
       limit: Number(limit),

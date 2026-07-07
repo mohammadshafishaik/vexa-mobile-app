@@ -270,8 +270,8 @@ router.get('/my', authMiddleware, async (req: Request, res: Response) => {
             select: {
               id: true,
               title: true,
-              categoryName: true,
-              locationName: true,
+              categorySlug: true,
+              location: true,
               originalPrice: true,
               revisedPrice: true,
               status: true,
@@ -286,9 +286,21 @@ router.get('/my', authMiddleware, async (req: Request, res: Response) => {
       prisma.bid.count({ where: { providerId: req.user!.userId } }),
     ]);
 
+    const bidsWithMappedJobs = bids.map((bid) => {
+      const job = bid.job ? {
+        ...bid.job,
+        categoryName: bid.job.categorySlug || 'General',
+        locationName: bid.job.location || '',
+      } : null;
+      return {
+        ...bid,
+        job,
+      };
+    });
+
     res.json({
       success: true,
-      data: bids,
+      data: bidsWithMappedJobs,
       total,
       page: Number(page),
       limit: Number(limit),

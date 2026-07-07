@@ -54,12 +54,12 @@ router.get('/disputes', async (req: Request, res: Response) => {
             },
           },
           raisedBy: { select: { id: true, name: true, email: true, role: true } },
-          resolvedBy: { select: { id: true, name: true, email: true, adminRole: true } },
+          resolvedBy: { select: { id: true, name: true, email: true, adminProfile: { select: { adminRole: true } } } },
           decisions: {
             orderBy: { createdAt: 'desc' },
             take: 3,
             include: {
-              resolvedBy: { select: { id: true, name: true, email: true, adminRole: true } },
+              resolvedBy: { select: { id: true, name: true, email: true, adminProfile: { select: { adminRole: true } } } },
             },
           },
         },
@@ -105,11 +105,11 @@ router.get('/disputes/:id', async (req: Request, res: Response) => {
           },
         },
         raisedBy: { select: { id: true, name: true, email: true, role: true } },
-        resolvedBy: { select: { id: true, name: true, email: true, adminRole: true } },
+        resolvedBy: { select: { id: true, name: true, email: true, adminProfile: { select: { adminRole: true } } } },
         decisions: {
           include: {
             resolvedBy: {
-              select: { id: true, name: true, email: true, adminRole: true },
+              select: { id: true, name: true, email: true, adminProfile: { select: { adminRole: true } } },
             },
           },
           orderBy: { createdAt: 'desc' },

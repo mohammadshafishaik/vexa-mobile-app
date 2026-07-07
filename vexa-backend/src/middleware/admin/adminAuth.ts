@@ -28,13 +28,13 @@ export async function adminAuthMiddleware(req: Request, res: Response, next: Nex
       select: {
         id: true,
         role: true,
-        adminRole: true,
+        adminProfile: { select: { adminRole: true } },
         accountStatus: true,
         suspendedUntil: true,
       },
     });
 
-    if (!adminUser || adminUser.role !== 'ADMIN' || !adminUser.adminRole) {
+    if (!adminUser || adminUser.role !== 'ADMIN' || !adminUser.adminProfile?.adminRole) {
       res.status(403).json({ success: false, message: 'Admin access denied' });
       return;
     }
@@ -59,7 +59,7 @@ export async function adminAuthMiddleware(req: Request, res: Response, next: Nex
 
     req.admin = {
       ...decoded,
-      adminRole: adminUser.adminRole,
+      adminRole: adminUser.adminProfile.adminRole as any,
     };
 
     next();

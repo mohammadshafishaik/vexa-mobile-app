@@ -67,7 +67,14 @@ router.get('/analytics/overview', async (_req: Request, res: Response) => {
       prisma.providerSkill.count(),
       prisma.portfolioItem.count(),
       prisma.cancellation.count(),
-      prisma.user.count({ where: { role: 'PROVIDER', availabilityStatus: 'ONLINE' } }),
+      prisma.user.count({
+        where: {
+          role: 'PROVIDER',
+          providerProfile: {
+            availabilityStatus: 'ONLINE',
+          },
+        },
+      }),
     ]);
 
     const grossRevenue = Number(paymentCompletedAggregate._sum.amount || 0);

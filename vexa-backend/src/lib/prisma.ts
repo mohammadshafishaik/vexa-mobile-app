@@ -18,8 +18,11 @@ if (!connectionString) {
 const config = parse(connectionString);
 const pool = new pg.Pool({
   ...config,
+  host: config.host || undefined,
   password: config.password || '',
   port: config.port ? parseInt(config.port, 10) : undefined,
+  database: config.database || undefined,
+  ssl: config.ssl as any,
 });
 const adapter = new PrismaPg(pool as any);
 

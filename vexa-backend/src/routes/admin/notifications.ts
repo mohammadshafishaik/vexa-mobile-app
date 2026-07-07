@@ -30,7 +30,11 @@ router.get('/notifications/campaigns', async (req: Request, res: Response) => {
               id: true,
               name: true,
               email: true,
-              adminRole: true,
+              adminProfile: {
+                select: {
+                  adminRole: true,
+                },
+              },
             },
           },
         },
@@ -157,7 +161,11 @@ router.post('/notifications/campaigns', async (req: Request, res: Response) => {
             id: true,
             name: true,
             email: true,
-            adminRole: true,
+            adminProfile: {
+              select: {
+                adminRole: true,
+              },
+            },
           },
         },
       },

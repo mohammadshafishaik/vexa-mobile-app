@@ -96,7 +96,13 @@ router.post('/kyc', authMiddleware, async (req: Request, res: Response) => {
       select: {
         id: true,
         isVerified: true,
-        kycStatus: true,
+        kycVerifications: {
+          select: {
+            status: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -105,7 +111,7 @@ router.post('/kyc', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const normalizedStatus = String(existingUser.kycStatus || '').toUpperCase();
+    const normalizedStatus = String(existingUser.kycVerifications?.[0]?.status || '').toUpperCase();
     if (normalizedStatus === 'APPROVED' || normalizedStatus === 'VERIFIED') {
       res.status(400).json({
         success: false,
@@ -137,7 +143,6 @@ router.post('/kyc', authMiddleware, async (req: Request, res: Response) => {
       return tx.user.update({
         where: { id: req.user!.userId },
         data: {
-          kycStatus: 'PENDING',
           isVerified: false,
         },
         select: {
@@ -146,12 +151,28 @@ router.post('/kyc', authMiddleware, async (req: Request, res: Response) => {
           email: true,
           role: true,
           isVerified: true,
-          kycStatus: true,
+          kycVerifications: {
+            select: {
+              status: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
         },
       });
     });
 
-    res.json({ success: true, data: user });
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified,
+        kycStatus: user.kycVerifications?.[0]?.status || 'PENDING',
+      },
+    });
   } catch (error: any) {
     console.error('KYC submission error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -172,7 +193,13 @@ router.get('/profile/:userId', authMiddleware, async (req: Request, res: Respons
         phone: true,
         role: true,
         isVerified: true,
-        kycStatus: true,
+        kycVerifications: {
+          select: {
+            status: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
         createdAt: true,
         providerProfile: {
           select: {
@@ -273,7 +300,7 @@ router.get('/profile/:userId', authMiddleware, async (req: Request, res: Respons
       bio: user.providerProfile?.bio || null,
       availabilityStatus: user.providerProfile?.availabilityStatus || 'OFFLINE',
       isVerified: user.isVerified,
-      kycStatus: user.kycStatus,
+      kycStatus: user.kycVerifications?.[0]?.status || 'PENDING',
       createdAt: user.createdAt,
       ratingsReceived: user.ratingsReceived.map((r, index) => {
         const reviewText = user.reviewsReceived[index]?.text || '';
@@ -343,7 +370,13 @@ router.patch('/profile', authMiddleware, async (req: Request, res: Response) => 
         phone: true,
         role: true,
         isVerified: true,
-        kycStatus: true,
+        kycVerifications: {
+          select: {
+            status: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
         createdAt: true,
         updatedAt: true,
         providerProfile: {
@@ -367,7 +400,7 @@ router.patch('/profile', authMiddleware, async (req: Request, res: Response) => 
         bio: user.providerProfile?.bio || null,
         availabilityStatus: user.providerProfile?.availabilityStatus || 'OFFLINE',
         isVerified: user.isVerified,
-        kycStatus: user.kycStatus,
+        kycStatus: user.kycVerifications?.[0]?.status || 'PENDING',
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },

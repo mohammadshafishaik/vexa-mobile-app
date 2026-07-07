@@ -116,7 +116,7 @@ async function sendEmail(options: SendEmailOptions): Promise<EmailSendResult> {
         }),
       });
 
-      const responseBody = await response.json().catch(() => ({} as any));
+      const responseBody: any = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         const errorMessage = responseBody?.error?.message || responseBody?.message || `Resend API returned ${response.status}`;

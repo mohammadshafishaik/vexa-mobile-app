@@ -22,7 +22,7 @@ const syncUserKycStatus = async (userId: string): Promise<void> => {
   if (docs.length === 0) {
     await prisma.user.update({
       where: { id: userId },
-      data: { kycStatus: 'NOT_STARTED', isVerified: false },
+      data: { isVerified: false },
     });
     return;
   }
@@ -33,7 +33,7 @@ const syncUserKycStatus = async (userId: string): Promise<void> => {
   if (hasRejected) {
     await prisma.user.update({
       where: { id: userId },
-      data: { kycStatus: 'REJECTED', isVerified: false },
+      data: { isVerified: false },
     });
     return;
   }
@@ -41,14 +41,14 @@ const syncUserKycStatus = async (userId: string): Promise<void> => {
   if (allApproved) {
     await prisma.user.update({
       where: { id: userId },
-      data: { kycStatus: 'APPROVED', isVerified: true },
+      data: { isVerified: true },
     });
     return;
   }
 
   await prisma.user.update({
     where: { id: userId },
-    data: { kycStatus: 'PENDING', isVerified: false },
+    data: { isVerified: false },
   });
 };
 
@@ -91,7 +91,6 @@ router.get('/kyc', async (req: Request, res: Response) => {
               email: true,
               phone: true,
               role: true,
-              kycStatus: true,
             },
           },
         },
@@ -127,7 +126,6 @@ router.get('/kyc/:id', async (req: Request, res: Response) => {
             email: true,
             phone: true,
             role: true,
-            kycStatus: true,
             isVerified: true,
           },
         },

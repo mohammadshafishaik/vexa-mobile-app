@@ -68,7 +68,7 @@ router.get('/bidding/jobs/:jobId', async (req: Request, res: Response) => {
         bidAnomalies: {
           include: {
             provider: { select: { id: true, name: true, email: true } },
-            reviewedBy: { select: { id: true, name: true, email: true, adminRole: true } },
+            reviewedBy: { select: { id: true, name: true, email: true, adminProfile: { select: { adminRole: true } } } },
           },
           orderBy: { createdAt: 'desc' },
         },
@@ -109,7 +109,7 @@ router.get('/bidding/anomalies', async (req: Request, res: Response) => {
           },
         },
         provider: { select: { id: true, name: true, email: true } },
-        reviewedBy: { select: { id: true, name: true, email: true, adminRole: true } },
+        reviewedBy: { select: { id: true, name: true, email: true, adminProfile: { select: { adminRole: true } } } },
       },
       orderBy: { createdAt: 'desc' },
       take: 200,

@@ -48,8 +48,8 @@ router.post('/estimate', authMiddleware, async (req: Request, res: Response) => 
       onlineProvidersNearby = await prisma.user.count({
         where: {
           role: 'PROVIDER',
-          availabilityStatus: 'ONLINE',
           providerProfile: {
+            availabilityStatus: 'ONLINE',
             // Check near provider locations if recorded
             user: {
               locationHistory: {

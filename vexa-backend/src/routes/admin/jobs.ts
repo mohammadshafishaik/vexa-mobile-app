@@ -69,7 +69,6 @@ router.get('/jobs', async (req: Request, res: Response) => {
               email: true,
               phone: true,
               accountStatus: true,
-              availabilityStatus: true,
               sessions: {
                 select: {
                   updatedAt: true,
@@ -87,7 +86,11 @@ router.get('/jobs', async (req: Request, res: Response) => {
               email: true,
               phone: true,
               accountStatus: true,
-              availabilityStatus: true,
+              providerProfile: {
+                select: {
+                  availabilityStatus: true,
+                },
+              },
               sessions: {
                 select: {
                   updatedAt: true,
@@ -140,7 +143,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
             email: job.customer.email,
             phone: job.customer.phone,
             accountStatus: job.customer.accountStatus,
-            availabilityStatus: job.customer.availabilityStatus,
+            availabilityStatus: 'OFFLINE',
             presenceStatus: toPresenceStatus(customerSession),
           }
         : null;
@@ -152,7 +155,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
             email: job.selectedProvider.email,
             phone: job.selectedProvider.phone,
             accountStatus: job.selectedProvider.accountStatus,
-            availabilityStatus: job.selectedProvider.availabilityStatus,
+            availabilityStatus: job.selectedProvider.providerProfile?.availabilityStatus || 'OFFLINE',
             presenceStatus: toPresenceStatus(providerSession),
           }
         : null;
@@ -192,7 +195,6 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
             email: true,
             phone: true,
             accountStatus: true,
-            availabilityStatus: true,
             sessions: {
               select: {
                 updatedAt: true,
@@ -210,7 +212,11 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
             email: true,
             phone: true,
             accountStatus: true,
-            availabilityStatus: true,
+            providerProfile: {
+              select: {
+                availabilityStatus: true,
+              },
+            },
             sessions: {
               select: {
                 updatedAt: true,
@@ -275,7 +281,6 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
                 id: true,
                 name: true,
                 email: true,
-                availabilityStatus: true,
               },
             },
           },
@@ -310,7 +315,7 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
           email: job.customer.email,
           phone: job.customer.phone,
           accountStatus: job.customer.accountStatus,
-          availabilityStatus: job.customer.availabilityStatus,
+          availabilityStatus: 'OFFLINE',
           presenceStatus: toPresenceStatus(job.customer.sessions[0]),
         }
       : null;
@@ -322,7 +327,7 @@ router.get('/jobs/:id', async (req: Request, res: Response) => {
           email: job.selectedProvider.email,
           phone: job.selectedProvider.phone,
           accountStatus: job.selectedProvider.accountStatus,
-          availabilityStatus: job.selectedProvider.availabilityStatus,
+          availabilityStatus: job.selectedProvider.providerProfile?.availabilityStatus || 'OFFLINE',
           presenceStatus: toPresenceStatus(job.selectedProvider.sessions[0]),
         }
       : null;

@@ -78,7 +78,11 @@ router.get('/payments', async (req: Request, res: Response) => {
                   id: true,
                   name: true,
                   email: true,
-                  adminRole: true,
+                  adminProfile: {
+                    select: {
+                      adminRole: true,
+                    },
+                  },
                 },
               },
             },
@@ -129,7 +133,7 @@ router.get('/payments/:id', async (req: Request, res: Response) => {
         payee: { select: { id: true, name: true, email: true } },
         actionLogs: {
           include: {
-            admin: { select: { id: true, name: true, email: true, adminRole: true } },
+            admin: { select: { id: true, name: true, email: true, adminProfile: { select: { adminRole: true } } } },
           },
           orderBy: { createdAt: 'desc' },
         },
