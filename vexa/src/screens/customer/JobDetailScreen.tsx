@@ -219,7 +219,7 @@ const JobDetailScreen: React.FC = () => {
     const body = encodeURIComponent(
       `Job ID: ${jobId}\nJob Title: ${job?.title}\nStatus: ${job?.status}\n\nDescribe your issue:\n`
     );
-    Linking.openURL(`mailto:support@vexaapp.com?subject=${subject}&body=${body}`);
+    Linking.openURL(`mailto:app.vexa.in@gmail.com?subject=${subject}&body=${body}`);
   };
 
   const handleRaiseDispute = () => {

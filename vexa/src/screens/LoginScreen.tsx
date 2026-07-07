@@ -18,6 +18,7 @@ import ScreenContainer from '../components/layout/ScreenContainer';
 import Button from '../components/ui/Button';
 import GlassCard from '../components/ui/GlassCard';
 import Input from '../components/ui/Input';
+import TurnstileCaptcha from '../components/auth/TurnstileCaptcha';
 import { colors } from '../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
@@ -68,6 +69,8 @@ const LoginScreen: React.FC = () => {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaEnabled, setCaptchaEnabled] = useState(false);
 
   const handleEmailBlur = useCallback(() => {
     if (email.trim()) {
@@ -94,6 +97,7 @@ const LoginScreen: React.FC = () => {
       const response = await api.post('/custom-auth/login', {
         email: email.trim().toLowerCase(),
         password: password.trim(),
+        captchaToken,
       });
 
       if (response.data.success) {
@@ -338,6 +342,19 @@ const LoginScreen: React.FC = () => {
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>
 
+              <TouchableOpacity
+                onPress={() => navigation.navigate('OtpLogin')}
+                style={styles.forgotButton}
+              >
+                <Text style={styles.forgotText}>Sign in with OTP</Text>
+              </TouchableOpacity>
+
+              <TurnstileCaptcha
+                action="login"
+                onTokenChange={setCaptchaToken}
+                onEnabledChange={setCaptchaEnabled}
+              />
+
               {/* Login Button */}
               <Button
                 title="Sign In"
@@ -346,7 +363,7 @@ const LoginScreen: React.FC = () => {
                 size="lg"
                 fullWidth
                 loading={isLoading}
-                disabled={isLoading}
+                disabled={isLoading || (captchaEnabled && !captchaToken)}
               />
             </GlassCard>
           </Animated.View>

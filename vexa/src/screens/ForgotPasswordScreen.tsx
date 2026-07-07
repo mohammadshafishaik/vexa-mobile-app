@@ -16,6 +16,7 @@ import ScreenContainer from '../components/layout/ScreenContainer';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import GlassCard from '../components/ui/GlassCard';
+import TurnstileCaptcha from '../components/auth/TurnstileCaptcha';
 import { colors } from '../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
@@ -35,6 +36,8 @@ const ForgotPasswordScreen: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [resetToken, setResetToken] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaEnabled, setCaptchaEnabled] = useState(false);
 
   const handleSendReset = async () => {
     const emailErr = validateEmail(email);
@@ -46,6 +49,7 @@ const ForgotPasswordScreen: React.FC = () => {
     try {
       const response = await api.post('/custom-auth/forgot-password', {
         email: email.trim().toLowerCase(),
+        captchaToken,
       });
 
       if (response.data.success) {
@@ -195,6 +199,12 @@ const ForgotPasswordScreen: React.FC = () => {
                 icon={<Mail size={18} color={emailError ? colors.error : colors.gray500} />}
               />
 
+              <TurnstileCaptcha
+                action="forgot_password"
+                onTokenChange={setCaptchaToken}
+                onEnabledChange={setCaptchaEnabled}
+              />
+
               <Button
                 title="Send Reset Link"
                 onPress={handleSendReset}
@@ -202,7 +212,7 @@ const ForgotPasswordScreen: React.FC = () => {
                 size="lg"
                 fullWidth
                 loading={isLoading}
-                disabled={isLoading || !email.trim()}
+                disabled={isLoading || !email.trim() || (captchaEnabled && !captchaToken)}
               />
             </GlassCard>
           </Animated.View>

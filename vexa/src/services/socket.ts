@@ -46,8 +46,18 @@ export const socketService = {
       }
     });
 
-    socket.on(SOCKET_EVENTS.NEW_NOTIFICATION, (notification) => {
+    socket.on(SOCKET_EVENTS.NEW_NOTIFICATION, (notification: any) => {
       useNotificationStore.getState().addNotification(notification);
+      try {
+        const { Alert } = require('react-native');
+        Alert.alert(
+          notification.title || 'Vexa Notification',
+          notification.body || '',
+          [{ text: 'Dismiss', style: 'cancel' }]
+        );
+      } catch (e) {
+        console.error('[Socket] Failed to show in-app notification:', e);
+      }
     });
 
     return socket;

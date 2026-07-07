@@ -28,6 +28,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import GlassCard from '../components/ui/GlassCard';
 import PasswordStrengthMeter from '../components/ui/PasswordStrengthMeter';
+import TurnstileCaptcha from '../components/auth/TurnstileCaptcha';
 import { colors } from '../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
@@ -72,6 +73,8 @@ const RegisterScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaEnabled, setCaptchaEnabled] = useState(false);
 
   // Errors
   const [nameError, setNameError] = useState<string | null>(null);
@@ -140,6 +143,7 @@ const RegisterScreen: React.FC = () => {
         role: selectedRole,
         password: password.trim(),
         initialSkills: selectedRole === UserRole.PROVIDER ? selectedProviderSkills : undefined,
+        captchaToken,
       });
 
       if (response.data.success) {
@@ -440,6 +444,11 @@ const RegisterScreen: React.FC = () => {
             entering={FadeInDown.delay(400).duration(500)}
             style={styles.submitArea}
           >
+            <TurnstileCaptcha
+              action="register"
+              onTokenChange={setCaptchaToken}
+              onEnabledChange={setCaptchaEnabled}
+            />
             <Button
               title="Create Account"
               onPress={handleComplete}
@@ -447,7 +456,7 @@ const RegisterScreen: React.FC = () => {
               size="lg"
               fullWidth
               loading={isSubmitting}
-              disabled={!isFormValid || isSubmitting}
+              disabled={!isFormValid || isSubmitting || (captchaEnabled && !captchaToken)}
             />
           </Animated.View>
 

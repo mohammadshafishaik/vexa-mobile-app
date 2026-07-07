@@ -14,6 +14,35 @@ export const authService = {
   },
 
   /**
+   * Send a one-time login code to the user's email address
+   */
+  sendLoginOtp: async (email: string, captchaToken: string): Promise<{ message: string }> => {
+    const response = await api.post('/custom-auth/otp/send', { email, captchaToken });
+    return response.data;
+  },
+
+  /**
+   * Get SVG captcha image from backend
+   */
+  getCaptchaImage: async (): Promise<{ id: string; svg: string }> => {
+    const response = await api.get<ApiResponse<{ id: string; svg: string }>>(
+      '/custom-auth/captcha-image',
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Verify a one-time login code and return authenticated session tokens
+   */
+  verifyLoginOtp: async (email: string, otp: string): Promise<LoginResponse> => {
+    const response = await api.post<ApiResponse<LoginResponse>>(
+      '/custom-auth/otp/verify',
+      { email, otp },
+    );
+    return response.data.data;
+  },
+
+  /**
    * Login with Google OAuth token
    */
   loginWithGoogle: async (data: {

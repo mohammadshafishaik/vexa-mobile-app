@@ -235,7 +235,7 @@ const ProfileScreen: React.FC = () => {
       icon: <HelpCircle size={20} color={colors.gray400} />,
       label: 'Help & Support',
       onPress: () => {
-        Alert.alert('Help & Support', 'Need help? Contact us at:\n\nsupport@vexa.app');
+        Alert.alert('Help & Support', 'Need help? Contact us at:\n\napp.vexa.in@gmail.com');
       },
     },
   ];
@@ -291,7 +291,7 @@ const ProfileScreen: React.FC = () => {
           {providerAvailability ? (
             <Text style={styles.profileMetaText}>Availability: {providerAvailability}</Text>
           ) : null}
-          {user?.bio ? (
+          {user?.bio && user.role !== 'CUSTOMER' ? (
             <Text style={styles.profileBio} numberOfLines={3}>{user.bio}</Text>
           ) : null}
           <Badge

@@ -162,17 +162,19 @@ const EditProfileScreen: React.FC = () => {
                 hint="10 digit mobile number"
               />
 
-              <Input
-                label="Bio"
-                placeholder="Tell others about your expertise and service style"
-                value={bio}
-                onChangeText={setBio}
-                icon={<FileText size={18} color={colors.gray500} />}
-                multiline
-                numberOfLines={3}
-                maxLength={240}
-                hint="Visible on your public profile"
-              />
+              {user?.role !== 'CUSTOMER' && (
+                <Input
+                  label="Bio"
+                  placeholder="Tell others about your expertise and service style"
+                  value={bio}
+                  onChangeText={setBio}
+                  icon={<FileText size={18} color={colors.gray500} />}
+                  multiline
+                  numberOfLines={3}
+                  maxLength={240}
+                  hint="Visible on your public profile"
+                />
+              )}
 
               {/* Email (read-only) */}
               <View style={styles.readOnlyField}>

@@ -128,24 +128,7 @@ const ProviderTabs: React.FC = () => {
           ),
         }}
       />
-      <Tab.Screen
-        name="Notifications"
-        component={NotificationScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <View>
-              <Bell size={size} color={color} strokeWidth={1.5} />
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </View>
-          ),
-        }}
-      />
+
       <Tab.Screen
         name="Profile"
         component={ProfileStackScreen}

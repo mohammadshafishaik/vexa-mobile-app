@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -25,7 +27,9 @@ import { ServiceRequest } from '../../types';
 import { formatCurrency, formatRelativeTime, sanitizeJobDescription } from '../../utils/helpers';
 import api from '../../services/api';
 import { availabilityService } from '../../services/availability';
+import { locationService } from '../../services/location';
 import { isKycVerifiedStatus } from '../../utils/kyc';
+import { WebView } from 'react-native-webview';
 
 const ProviderDashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -38,9 +42,94 @@ const ProviderDashboardScreen: React.FC = () => {
   const setLoading = useJobStore((s) => s.setLoading);
   const [stats, setStats] = useState({ active: 0, completed: 0, earned: 0 });
   const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
+  const [isLocationSyncing, setIsLocationSyncing] = useState(false);
+  const [locationSyncError, setLocationSyncError] = useState<string | null>(null);
+  const locationSyncTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const providerAvailability = user?.availabilityStatus || 'OFFLINE';
   const isProviderOnline = providerAvailability === 'ONLINE';
+
+  const activeJobs = useMemo(
+    () => jobs.filter(
+      (job) =>
+        job.selectedProviderId === user?.id &&
+        ['ACCEPTED', 'IN_PROGRESS', 'ON_SITE_INSPECTION'].includes(job.status)
+    ),
+    [jobs, user?.id],
+  );
+
+  const requestLocationPermission = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS === 'ios') {
+      // if (typeof Geolocation.requestAuthorization === 'function') {
+      //   Geolocation.requestAuthorization();
+      // }
+      return true;
+    }
+
+    const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+    const alreadyGranted = await PermissionsAndroid.check(permission);
+    if (alreadyGranted) {
+      return true;
+    }
+
+    const granted = await PermissionsAndroid.request(permission, {
+      title: 'Allow Location Access',
+      message: 'Vexa needs your GPS location to keep your active jobs updated in real time.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Deny',
+      buttonNeutral: 'Ask Me Later',
+    });
+
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  }, []);
+
+  const pushCurrentLocation = useCallback(async () => {
+    if (!isProviderOnline || activeJobs.length === 0) {
+      return;
+    }
+
+    const hasPermission = await requestLocationPermission().catch(() => false);
+    if (!hasPermission) {
+      setLocationSyncError('Location permission is required for live tracking.');
+      return;
+    }
+
+    setIsLocationSyncing(true);
+    setLocationSyncError(null);
+  }, [isProviderOnline, requestLocationPermission]);
+
+  useEffect(() => {
+    if (locationSyncTimer.current) {
+      clearInterval(locationSyncTimer.current);
+      locationSyncTimer.current = null;
+    }
+
+    pushCurrentLocation();
+  }, [activeJobs.length, isProviderOnline, pushCurrentLocation]);
+
+  const handleLocationMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.latitude && data.longitude && activeJobs.length > 0) {
+        setIsLocationSyncing(true);
+        Promise.all(
+          activeJobs.map((job) =>
+            locationService.updateLocation({
+              jobId: job.id,
+              latitude: data.latitude,
+              longitude: data.longitude,
+            })
+          )
+        ).catch(err => {
+          setLocationSyncError(err?.message || 'Failed to update location');
+        }).finally(() => {
+          setIsLocationSyncing(false);
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleQuickAvailabilityToggle = async () => {
     if (isUpdatingAvailability) {
@@ -214,6 +303,17 @@ const ProviderDashboardScreen: React.FC = () => {
         </GlassCard>
       </Animated.View>
 
+      {(isLocationSyncing || locationSyncError) && (
+        <Animated.View entering={FadeInDown.delay(80).duration(300)}>
+          <GlassCard style={styles.locationSyncCard}>
+            <Text style={styles.locationSyncTitle}>Live location tracking</Text>
+            <Text style={styles.locationSyncText}>
+              {locationSyncError || (isLocationSyncing ? 'Pushing your GPS updates for active jobs.' : 'No active jobs to track yet.')}
+            </Text>
+          </GlassCard>
+        </Animated.View>
+      )}
+
       <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.statsRow}>
         <GlassCard style={styles.statCard}>
           <Briefcase size={18} color={colors.white} style={{ marginBottom: 4 }} />
@@ -279,6 +379,45 @@ const ProviderDashboardScreen: React.FC = () => {
           />
         }
       />
+      
+      {/* Hidden WebView for HTML5 Geolocation Polyfill */}
+      {isProviderOnline && activeJobs.length > 0 && (
+        <View style={{ width: 0, height: 0, opacity: 0, overflow: 'hidden' }}>
+          <WebView
+            source={{ html: `
+              <!DOCTYPE html>
+              <html>
+              <body>
+                <script>
+                  let lastPush = 0;
+                  const pushLocation = (position) => {
+                    const now = Date.now();
+                    if (now - lastPush > 10000) { // Limit to once every 10 seconds
+                      lastPush = now;
+                      window.ReactNativeWebView.postMessage(JSON.stringify({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude
+                      }));
+                    }
+                  };
+                  
+                  navigator.geolocation.watchPosition(
+                    pushLocation,
+                    (error) => {
+                      window.ReactNativeWebView.postMessage(JSON.stringify({ error: error.message }));
+                    },
+                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+                  );
+                </script>
+              </body>
+              </html>
+            `}}
+            geolocationEnabled={true}
+            onMessage={handleLocationMessage}
+            javaScriptEnabled={true}
+          />
+        </View>
+      )}
     </ScreenContainer>
   );
 };
@@ -332,6 +471,20 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semibold,
     fontSize: fontSizes.sm,
     color: colors.white,
+  },
+  locationSyncCard: {
+    marginBottom: spacing[4],
+  },
+  locationSyncTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: fontSizes.base,
+    color: colors.white,
+    marginBottom: 4,
+  },
+  locationSyncText: {
+    ...typography.caption,
+    color: colors.gray500,
+    lineHeight: 18,
   },
   statsRow: {
     flexDirection: 'row',

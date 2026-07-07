@@ -66,7 +66,6 @@ const PaymentScreen: React.FC = () => {
         image: 'https://i.imgur.com/3g7nmJC.png',
         currency: order.currency,
         key: order.keyId,
-        amount: order.amount,
         name: 'VEXA',
         order_id: order.orderId,
         theme: { color: colors.white },

@@ -15,6 +15,34 @@ const api: AxiosInstance = axios.create({
   },
 });
 
+const logApiError = (error: AxiosError): void => {
+  const method = (error.config?.method || 'GET').toUpperCase();
+  const requestUrl = error.config?.url || 'unknown-url';
+  const status = error.response?.status;
+  const statusText = error.response?.statusText || '';
+  const responseData = error.response?.data;
+
+  // Keep logs compact and serializable for Android logcat in both debug/release.
+  let serializedData = '';
+  try {
+    serializedData = typeof responseData === 'string'
+      ? responseData
+      : JSON.stringify(responseData);
+  } catch {
+    serializedData = '[unserializable-response-data]';
+  }
+
+  console.error(
+    `[API_ERROR] ${method} ${requestUrl} -> ${status ?? 'NO_STATUS'} ${statusText}`,
+  );
+  if (serializedData) {
+    console.error(`[API_ERROR_RESPONSE] ${serializedData}`);
+  }
+  if (error.message) {
+    console.error(`[API_ERROR_MESSAGE] ${error.message}`);
+  }
+};
+
 let lastWarmupAt = 0;
 
 export const warmupBackend = async (): Promise<void> => {
@@ -64,6 +92,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    logApiError(error);
+
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };

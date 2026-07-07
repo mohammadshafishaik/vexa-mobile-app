@@ -395,13 +395,13 @@ export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
   ForgotPassword: undefined;
+  OtpLogin: undefined;
   ResetPassword: { token: string; email: string };
 };
 
 export type CustomerTabParamList = {
   Dashboard: undefined;
   Messages: undefined;
-  Notifications: undefined;
   Profile: undefined;
 };
 
@@ -422,7 +422,6 @@ export type CustomerStackParamList = {
 export type ProviderTabParamList = {
   Dashboard: undefined;
   Messages: undefined;
-  Notifications: undefined;
   Profile: undefined;
 };
 

@@ -14,7 +14,7 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import Geolocation from '@react-native-community/geolocation';
+// import Geolocation from '@react-native-community/geolocation';
 import {
   ChevronLeft,
   MapPin,
@@ -52,18 +52,18 @@ const CATEGORIES = [
 ];
 
 const CATEGORY_MIN_BUDGET: Record<string, number> = {
-  Plumbing: 300,
-  Electrical: 300,
-  Cleaning: 250,
-  Painting: 400,
-  Carpentry: 350,
-  'Appliance Repair': 350,
-  'AC Service': 400,
-  'Pest Control': 450,
-  Other: 250,
+  Plumbing: 150,
+  Electrical: 150,
+  Cleaning: 100,
+  Painting: 200,
+  Carpentry: 150,
+  'Appliance Repair': 150,
+  'AC Service': 200,
+  'Pest Control': 200,
+  Other: 100,
 };
 
-const DEFAULT_MIN_BUDGET = 250;
+const DEFAULT_MIN_BUDGET = 100;
 
 const getMinimumBudgetForCategory = (category: string): number => {
   if (!category) return DEFAULT_MIN_BUDGET;
@@ -90,7 +90,8 @@ const PostJobScreen: React.FC = () => {
 
   const getCurrentPositionAsync = (options: any): Promise<any> =>
     new Promise((resolve, reject) => {
-      Geolocation.getCurrentPosition(resolve, reject, options);
+      // Geolocation.getCurrentPosition(resolve, reject, options);
+      resolve({ coords: { latitude: 0, longitude: 0 } } as any); // Mock location for now
     });
 
   const getReadableLocationError = (error: any): string => {
@@ -195,9 +196,9 @@ const PostJobScreen: React.FC = () => {
 
   const requestLocationPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') {
-      if (typeof Geolocation.requestAuthorization === 'function') {
-        Geolocation.requestAuthorization();
-      }
+      // if (typeof Geolocation.requestAuthorization === 'function') {
+      //   Geolocation.requestAuthorization();
+      // }
       return true;
     }
 
