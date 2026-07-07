@@ -14,7 +14,7 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
-// import Geolocation from '@react-native-community/geolocation';
+import Geolocation from '@react-native-community/geolocation';
 import {
   ChevronLeft,
   MapPin,
@@ -90,8 +90,7 @@ const PostJobScreen: React.FC = () => {
 
   const getCurrentPositionAsync = (options: any): Promise<any> =>
     new Promise((resolve, reject) => {
-      // Geolocation.getCurrentPosition(resolve, reject, options);
-      resolve({ coords: { latitude: 0, longitude: 0 } } as any); // Mock location for now
+      Geolocation.getCurrentPosition(resolve, reject, options);
     });
 
   const getReadableLocationError = (error: any): string => {
@@ -196,9 +195,9 @@ const PostJobScreen: React.FC = () => {
 
   const requestLocationPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') {
-      // if (typeof Geolocation.requestAuthorization === 'function') {
-      //   Geolocation.requestAuthorization();
-      // }
+      if (typeof Geolocation.requestAuthorization === 'function') {
+        Geolocation.requestAuthorization();
+      }
       return true;
     }
 
