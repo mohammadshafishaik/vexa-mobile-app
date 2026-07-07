@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
-    "build": "npx prisma generate",
+    "build": "npx prisma generate && npx prisma db push --accept-data-loss",
     "start": "tsx src/index.ts",
     "admin:create": "tsx --env-file=.env scripts/create-super-admin.ts",
     "prisma:studio": "npx prisma studio",
