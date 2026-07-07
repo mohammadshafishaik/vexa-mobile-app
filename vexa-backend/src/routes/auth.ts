@@ -608,7 +608,7 @@ router.post('/forgot-password', captchaMiddleware('forgot_password'), async (req
     if (!isEmailConfigured()) {
       res.status(503).json({
         success: false,
-        message: 'Password reset email service is not configured. Please contact support.',
+        message: 'Password reset email service is not configured. Please contact support at app.vexa.in@gmail.com',
       });
       return;
     }

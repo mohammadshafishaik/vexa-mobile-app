@@ -32,7 +32,7 @@ export const getAccountAccessBlock = (
     return {
       statusCode: 403,
       code: 'ACCOUNT_DELETED',
-      message: 'Your account is no longer available. Please contact support for assistance.',
+      message: 'Your account is no longer available. Please contact support at app.vexa.in@gmail.com for assistance.',
     };
   }
 
@@ -52,7 +52,7 @@ export const getAccountAccessBlock = (
     return {
       statusCode: 403,
       code: 'ACCOUNT_DEACTIVATED',
-      message: 'Your account has been deactivated. Please contact support to reactivate.',
+      message: 'Your account has been deactivated. Please contact support at app.vexa.in@gmail.com to reactivate.',
     };
   }
 

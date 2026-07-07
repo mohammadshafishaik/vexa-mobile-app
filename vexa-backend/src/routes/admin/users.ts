@@ -83,7 +83,7 @@ const buildStatusNotificationPayload = ({
   if (accountStatus === 'DELETED') {
     return {
       title: 'Account Deactivated',
-      body: 'Your Vexa account has been deactivated. Contact support for assistance.',
+      body: 'Your Vexa account has been deactivated. Contact support at app.vexa.in@gmail.com for assistance.',
     };
   }
 
