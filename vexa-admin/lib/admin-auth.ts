@@ -6,30 +6,23 @@ const isBrowser = (): boolean => typeof window !== 'undefined';
 export const tokenStore = {
   getAccessToken(): string | null {
     if (!isBrowser()) return null;
-    const match = document.cookie.match(new RegExp('(^| )' + ACCESS_TOKEN_KEY + '=([^;]+)'));
-    return match ? decodeURIComponent(match[2]) : null;
+    return localStorage.getItem(ACCESS_TOKEN_KEY);
   },
 
   getRefreshToken(): string | null {
     if (!isBrowser()) return null;
-    const match = document.cookie.match(new RegExp('(^| )' + REFRESH_TOKEN_KEY + '=([^;]+)'));
-    return match ? decodeURIComponent(match[2]) : null;
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
   },
 
   setTokens(accessToken: string, refreshToken: string): void {
     if (!isBrowser()) return;
-    const days = 7;
-    const date = new Date();
-    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-    const expires = "; expires=" + date.toUTCString();
-    
-    document.cookie = `${ACCESS_TOKEN_KEY}=${encodeURIComponent(accessToken)}${expires}; path=/; SameSite=Lax`;
-    document.cookie = `${REFRESH_TOKEN_KEY}=${encodeURIComponent(refreshToken)}${expires}; path=/; SameSite=Lax`;
+    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
   },
 
   clearTokens(): void {
     if (!isBrowser()) return;
-    document.cookie = `${ACCESS_TOKEN_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-    document.cookie = `${REFRESH_TOKEN_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
   },
 };
