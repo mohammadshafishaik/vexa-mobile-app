@@ -33,38 +33,55 @@ export const upsertSuperAdmin = async (values?: Partial<UpsertSuperAdminInput>) 
   const { email, password, name } = resolveSuperAdminInput(values);
   const passwordHash = await bcrypt.hash(password, 10);
 
-  return prisma.user.upsert({
+  const existingUser = await prisma.user.findUnique({
     where: { email },
-    update: {
-      name,
-      password: passwordHash,
-      role: 'ADMIN',
-      adminProfile: {
-        upsert: {
-          create: { adminRole: 'SUPER_ADMIN' },
-          update: { adminRole: 'SUPER_ADMIN' }
-        }
+    select: { id: true }
+  });
+
+  let user;
+
+  if (existingUser) {
+    user = await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        name,
+        password: passwordHash,
+        role: 'ADMIN',
+        accountStatus: 'ACTIVE',
+        isVerified: true,
+        emailVerified: true,
+        suspendedUntil: null,
+        banReason: null,
+        bannedAt: null,
+        bannedById: null,
       },
-      accountStatus: 'ACTIVE',
-      isVerified: true,
-      emailVerified: true,
-      suspendedUntil: null,
-      banReason: null,
-      bannedAt: null,
-      bannedById: null,
-    },
+    });
+  } else {
+    user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        password: passwordHash,
+        role: 'ADMIN',
+        accountStatus: 'ACTIVE',
+        isVerified: true,
+        emailVerified: true,
+      },
+    });
+  }
+
+  // Ensure AdminProfile exists and is up to date
+  await prisma.adminProfile.upsert({
+    where: { userId: user.id },
+    update: { adminRole: 'SUPER_ADMIN' },
     create: {
-      email,
-      name,
-      password: passwordHash,
-      role: 'ADMIN',
-      adminProfile: {
-        create: { adminRole: 'SUPER_ADMIN' }
-      },
-      accountStatus: 'ACTIVE',
-      isVerified: true,
-      emailVerified: true,
+      userId: user.id,
+      adminRole: 'SUPER_ADMIN',
     },
+  });
+
+  return prisma.user.findUnique({
+    where: { id: user.id },
     select: {
       id: true,
       email: true,

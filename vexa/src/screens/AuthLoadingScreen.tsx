@@ -56,10 +56,7 @@ const AuthLoadingScreen: React.FC = () => {
   useEffect(() => {
     // Connect socket during loading
     try {
-      const socket = socketService.connect();
-      if (user?.id) {
-        socket.emit('user:join', user.id);
-      }
+      socketService.connect();
     } catch (e) {
       console.warn('[AuthLoading] Socket connection failed:', e);
     }

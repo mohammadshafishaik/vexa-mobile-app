@@ -34,6 +34,7 @@ import Button from '../../components/ui/Button';
 import { JobStatusBadge } from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
 import VerifiedName from '../../components/ui/VerifiedName';
+import { LiveTrackingMap } from '../../components/LiveTrackingMap';
 import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
@@ -47,6 +48,8 @@ import { cancellationService } from '../../services/cancellations';
 import api from '../../services/api';
 import { resolveImageUrl } from '../../utils/image';
 import { isKycVerifiedStatus } from '../../utils/kyc';
+import socket from '../../services/socket';
+import Geolocation from '@react-native-community/geolocation';
 
 type JobDetailRoute = RouteProp<CustomerStackParamList, 'JobDetail'>;
 
@@ -59,6 +62,7 @@ const JobDetailScreen: React.FC = () => {
   const [job, setJob] = useState<ServiceRequest | null>(useJobStore.getState().selectedJob);
   const [loading, setLoading] = useState(!job);
   const [actionLoading, setActionLoading] = useState(false);
+  const [providerLocation, setProviderLocation] = useState<{ latitude: number; longitude: number } | undefined>();
 
   const isProvider = currentUser?.role === 'PROVIDER';
   const isCustomer = currentUser?.role === 'CUSTOMER';
@@ -118,6 +122,47 @@ const JobDetailScreen: React.FC = () => {
       return () => { isActive = false; };
     }, [jobId])
   );
+
+  useEffect(() => {
+    if (!canTrackProviderLocation) return;
+    
+    const handleLocationUpdate = (data: { jobId: string; latitude: number; longitude: number }) => {
+      if (data.jobId === jobId) {
+        setProviderLocation({ latitude: data.latitude, longitude: data.longitude });
+      }
+    };
+
+    socket.on('location:provider', handleLocationUpdate);
+    return () => {
+      socket.off('location:provider', handleLocationUpdate);
+    };
+  }, [canTrackProviderLocation, jobId]);
+
+  // Provider location emitter
+  useEffect(() => {
+    const shouldEmitLocation =
+      isAssignedProvider &&
+      job &&
+      ['ACCEPTED', 'ON_SITE_INSPECTION', 'IN_PROGRESS'].includes(job.status);
+
+    if (!shouldEmitLocation) return;
+
+    const watchId = Geolocation.watchPosition(
+      (position) => {
+        socket.emit('location:update', {
+          jobId,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      (error) => console.log('Location error:', error),
+      { enableHighAccuracy: true, distanceFilter: 10, interval: 10000, fastestInterval: 5000 }
+    );
+
+    return () => {
+      Geolocation.clearWatch(watchId);
+    };
+  }, [isAssignedProvider, job?.status, jobId]);
 
   const handleViewBids = () => {
     navigation.navigate('LiveBidding', { jobId });
@@ -522,6 +567,18 @@ const JobDetailScreen: React.FC = () => {
                 )}
               </View>
             </GlassCard>
+          </Animated.View>
+        )}
+
+        {/* Live Tracking Map */}
+        {canTrackProviderLocation && job?.latitude && job?.longitude && (
+          <Animated.View entering={FadeInDown.delay(350).duration(400)} style={{ marginBottom: spacing[5] }}>
+            <Text style={styles.sectionTitle}>Live Tracking</Text>
+            <LiveTrackingMap
+              customerLocation={{ latitude: job.latitude, longitude: job.longitude }}
+              providerLocation={providerLocation}
+              isTracking={true}
+            />
           </Animated.View>
         )}
 

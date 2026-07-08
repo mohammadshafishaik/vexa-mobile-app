@@ -90,7 +90,15 @@ const PostJobScreen: React.FC = () => {
 
   const getCurrentPositionAsync = (options: any): Promise<any> =>
     new Promise((resolve, reject) => {
-      Geolocation.getCurrentPosition(resolve, reject, options);
+      try {
+        if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
+           reject(new Error('GPS module is not linked. Please run pod install or use manual location.'));
+           return;
+        }
+        Geolocation.getCurrentPosition(resolve, reject, options);
+      } catch (e) {
+        reject(e);
+      }
     });
 
   const getReadableLocationError = (error: any): string => {
@@ -195,8 +203,12 @@ const PostJobScreen: React.FC = () => {
 
   const requestLocationPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') {
-      if (typeof Geolocation.requestAuthorization === 'function') {
-        Geolocation.requestAuthorization();
+      try {
+        if (Geolocation && typeof Geolocation.requestAuthorization === 'function') {
+          Geolocation.requestAuthorization();
+        }
+      } catch (e) {
+        // Module might not be linked, fail gracefully
       }
       return true;
     }

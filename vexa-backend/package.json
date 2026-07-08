@@ -7,7 +7,7 @@
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "npx prisma generate",
     "postinstall": "npm run build",
-    "start": "npx prisma db push --accept-data-loss && tsx src/index.ts",
+    "start": "tsx src/index.ts",
     "admin:create": "tsx --env-file=.env scripts/create-super-admin.ts",
     "prisma:studio": "npx prisma studio",
     "prisma:migrate": "npx prisma migrate dev",
@@ -19,7 +19,9 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@opentelemetry/semantic-conventions": "^1.41.1",
+    "@prisma/adapter-neon": "^7.8.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@types/pg": "^8.20.0",
@@ -39,6 +41,7 @@
     "socket.io": "^4.8.3",
     "svg-captcha": "^1.4.0",
     "uuid": "^13.0.0",
+    "ws": "^8.21.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

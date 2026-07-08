@@ -1,8 +1,13 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
-import { parse } from 'pg-connection-string';
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import { PrismaNeon } from '@prisma/adapter-neon';
+import ws from 'ws';
 
+// Set up WebSocket polyfill for Neon serverless
+neonConfig.webSocketConstructor = ws;
+
+// We can just use the standard DATABASE_URL. 
+// Note: Neon connection string over WebSockets does NOT use pgbouncer.
 const connectionString =
   process.env.DATABASE_URL
   || process.env.DATABASE_INTERNAL_URL
@@ -15,16 +20,7 @@ if (!connectionString) {
   throw new Error('Database URL is missing. Set DATABASE_URL in production environment variables.');
 }
 
-const config = parse(connectionString);
-const pool = new pg.Pool({
-  ...config,
-  host: config.host || undefined,
-  password: config.password || '',
-  port: config.port ? parseInt(config.port, 10) : undefined,
-  database: config.database || undefined,
-  ssl: config.ssl as any,
-});
-const adapter = new PrismaPg(pool as any);
+const adapter = new PrismaNeon({ connectionString });
 
 const prisma = new PrismaClient({
   adapter,
