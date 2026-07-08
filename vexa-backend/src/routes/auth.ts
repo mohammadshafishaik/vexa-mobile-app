@@ -444,9 +444,15 @@ router.post('/otp/send', captchaMiddleware('otp_send'), async (req: Request, res
     });
 
     // Send email
-    sendLoginOtpEmail(user.email, user.name, otpCode).catch((err) =>
-      console.error('[Email] Failed to send login OTP:', err)
-    );
+    const emailResult = await sendLoginOtpEmail(user.email, user.name, otpCode);
+    if (!emailResult.success) {
+      console.error('[Email] Failed to send login OTP:', emailResult.error);
+      res.status(500).json({
+        success: false,
+        message: `Failed to send email verification: ${emailResult.error || 'Unknown SMTP error'}`,
+      });
+      return;
+    }
 
     res.json({
       success: true,
