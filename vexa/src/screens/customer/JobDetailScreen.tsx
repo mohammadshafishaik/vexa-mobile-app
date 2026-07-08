@@ -48,7 +48,7 @@ import { cancellationService } from '../../services/cancellations';
 import api from '../../services/api';
 import { resolveImageUrl } from '../../utils/image';
 import { isKycVerifiedStatus } from '../../utils/kyc';
-import socket from '../../services/socket';
+import { socketService } from '../../services/socket';
 import Geolocation from '@react-native-community/geolocation';
 
 type JobDetailRoute = RouteProp<CustomerStackParamList, 'JobDetail'>;
@@ -132,9 +132,14 @@ const JobDetailScreen: React.FC = () => {
       }
     };
 
-    socket.on('location:provider', handleLocationUpdate);
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.on('location:provider', handleLocationUpdate);
+    }
     return () => {
-      socket.off('location:provider', handleLocationUpdate);
+      if (socket) {
+        socket.off('location:provider', handleLocationUpdate);
+      }
     };
   }, [canTrackProviderLocation, jobId]);
 
@@ -146,6 +151,9 @@ const JobDetailScreen: React.FC = () => {
       ['ACCEPTED', 'ON_SITE_INSPECTION', 'IN_PROGRESS'].includes(job.status);
 
     if (!shouldEmitLocation) return;
+
+    const socket = socketService.getSocket();
+    if (!socket) return;
 
     const watchId = Geolocation.watchPosition(
       (position) => {
