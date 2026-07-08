@@ -44,7 +44,9 @@ const authUserSelect = {
     select: {
       status: true,
       fileUrl: true,
-    }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
   }
 } as const;
 
@@ -819,7 +821,9 @@ router.get('/profile', authMiddleware, async (req: Request, res: Response) => {
           select: {
             status: true,
             fileUrl: true,
-          }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
         }
       },
     });
@@ -901,7 +905,9 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
           select: {
             status: true,
             fileUrl: true,
-          }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
         }
       },
     });

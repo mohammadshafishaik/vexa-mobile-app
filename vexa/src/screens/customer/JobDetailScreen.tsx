@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   Linking,
+  Platform,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
@@ -24,9 +25,11 @@ import {
   CheckCircle,
   Mail,
   Zap,
+  Zap,
   AlertTriangle,
   MessageCircle,
   XCircle,
+  Phone,
 } from 'lucide-react-native';
 import ScreenContainer from '../../components/layout/ScreenContainer';
 import GlassCard from '../../components/ui/GlassCard';
@@ -34,7 +37,6 @@ import Button from '../../components/ui/Button';
 import { JobStatusBadge } from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
 import VerifiedName from '../../components/ui/VerifiedName';
-import { LiveTrackingMap } from '../../components/LiveTrackingMap';
 import { colors } from '../../theme/colors';
 import { fontFamilies, fontSizes, typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
@@ -49,7 +51,6 @@ import api from '../../services/api';
 import { resolveImageUrl } from '../../utils/image';
 import { isKycVerifiedStatus } from '../../utils/kyc';
 import { socketService } from '../../services/socket';
-import Geolocation from '@react-native-community/geolocation';
 
 type JobDetailRoute = RouteProp<CustomerStackParamList, 'JobDetail'>;
 
@@ -62,7 +63,6 @@ const JobDetailScreen: React.FC = () => {
   const [job, setJob] = useState<ServiceRequest | null>(useJobStore.getState().selectedJob);
   const [loading, setLoading] = useState(!job);
   const [actionLoading, setActionLoading] = useState(false);
-  const [providerLocation, setProviderLocation] = useState<{ latitude: number; longitude: number } | undefined>();
 
   const isProvider = currentUser?.role === 'PROVIDER';
   const isCustomer = currentUser?.role === 'CUSTOMER';
@@ -73,10 +73,11 @@ const JobDetailScreen: React.FC = () => {
     && isParticipant
     && ![JobStatus.POSTED, JobStatus.BIDDING, JobStatus.CANCELLED].includes(job.status)
   );
-  const canTrackProviderLocation = !!(
+  const canCallProvider = !!(
     job?.selectedProviderId
     && isCustomer
     && [JobStatus.ACCEPTED, JobStatus.ON_SITE_INSPECTION, JobStatus.IN_PROGRESS].includes(job.status)
+    && job.selectedProvider?.phone
   );
   const hasCurrentUserRated = !!job?.ratings?.some((r) => r.raterId === currentUser?.id);
   const pendingModification = job?.modifications?.find((m) => m.approvalStatus === 'PENDING') || job?.modifications?.[0];
@@ -123,55 +124,6 @@ const JobDetailScreen: React.FC = () => {
     }, [jobId])
   );
 
-  useEffect(() => {
-    if (!canTrackProviderLocation) return;
-    
-    const handleLocationUpdate = (data: { jobId: string; latitude: number; longitude: number }) => {
-      if (data.jobId === jobId) {
-        setProviderLocation({ latitude: data.latitude, longitude: data.longitude });
-      }
-    };
-
-    const socket = socketService.getSocket();
-    if (socket) {
-      socket.on('location:provider', handleLocationUpdate);
-    }
-    return () => {
-      if (socket) {
-        socket.off('location:provider', handleLocationUpdate);
-      }
-    };
-  }, [canTrackProviderLocation, jobId]);
-
-  // Provider location emitter
-  useEffect(() => {
-    const shouldEmitLocation =
-      isAssignedProvider &&
-      job &&
-      ['ACCEPTED', 'ON_SITE_INSPECTION', 'IN_PROGRESS'].includes(job.status);
-
-    if (!shouldEmitLocation) return;
-
-    const socket = socketService.getSocket();
-    if (!socket) return;
-
-    const watchId = Geolocation.watchPosition(
-      (position) => {
-        socket.emit('location:update', {
-          jobId,
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-      },
-      (error) => console.log('Location error:', error),
-      { enableHighAccuracy: true, distanceFilter: 10, interval: 10000, fastestInterval: 5000 }
-    );
-
-    return () => {
-      Geolocation.clearWatch(watchId);
-    };
-  }, [isAssignedProvider, job?.status, jobId]);
-
   const handleViewBids = () => {
     navigation.navigate('LiveBidding', { jobId });
   };
@@ -185,8 +137,14 @@ const JobDetailScreen: React.FC = () => {
     navigation.navigate('ProviderProfile', { userId: job.selectedProviderId });
   };
 
-  const handleTrackProviderLocation = () => {
-    navigation.navigate('ProviderLocation', { jobId });
+  const handleCallProvider = () => {
+    if (job?.selectedProvider?.phone) {
+      Linking.openURL(`tel:${job.selectedProvider.phone}`);
+    }
+  };
+
+  const handleFinishWork = async () => {
+    navigation.navigate('Payment', { jobId });
   };
 
   const handlePayment = () => {
@@ -563,30 +521,18 @@ const JobDetailScreen: React.FC = () => {
                   </TouchableOpacity>
                 )}
 
-                {canTrackProviderLocation && (
+                {canCallProvider && (
                   <TouchableOpacity
                     style={styles.providerActionButton}
-                    onPress={handleTrackProviderLocation}
+                    onPress={handleCallProvider}
                     activeOpacity={0.8}
                   >
-                    <MapPin size={16} color={colors.white} />
-                    <Text style={styles.providerActionText}>Track Live</Text>
+                    <Phone size={16} color={colors.white} />
+                    <Text style={styles.providerActionText}>Call</Text>
                   </TouchableOpacity>
                 )}
               </View>
             </GlassCard>
-          </Animated.View>
-        )}
-
-        {/* Live Tracking Map */}
-        {canTrackProviderLocation && job?.latitude && job?.longitude && (
-          <Animated.View entering={FadeInDown.delay(350).duration(400)} style={{ marginBottom: spacing[5] }}>
-            <Text style={styles.sectionTitle}>Live Tracking</Text>
-            <LiveTrackingMap
-              customerLocation={{ latitude: job.latitude, longitude: job.longitude }}
-              providerLocation={providerLocation}
-              isTracking={true}
-            />
           </Animated.View>
         )}
 

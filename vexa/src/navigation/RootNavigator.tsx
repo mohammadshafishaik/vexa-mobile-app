@@ -5,6 +5,8 @@ import { RootStackParamList } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
 import { useJobStore } from '../store/useJobStore';
 import { socketService } from '../services/socket';
+import { NotificationService } from '../services/NotificationService';
+import api from '../services/api';
 import { colors } from '../theme/colors';
 import { UserRole } from '../types';
 
@@ -36,6 +38,22 @@ const RootNavigator: React.FC = () => {
             updateJob(data.jobId, { status: 'MODIFICATION_REQUESTED' as any });
          }
       });
+
+      // Register Push Notifications
+      const registerPush = async () => {
+        try {
+          const hasPermission = await NotificationService.requestPermission();
+          if (hasPermission) {
+            const token = await NotificationService.getToken();
+            if (token) {
+              await api.post('/users/device-token', { deviceToken: token });
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to register push token:', error);
+        }
+      };
+      registerPush();
     }
   }, [isAuthenticated, updateJob]);
 

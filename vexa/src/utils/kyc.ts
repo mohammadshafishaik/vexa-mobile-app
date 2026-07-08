@@ -3,8 +3,10 @@ export type KycDisplayStatus = 'NOT_SUBMITTED' | 'PENDING' | 'REJECTED' | 'VERIF
 export const normalizeKycStatus = (status?: string | null): string =>
   String(status || '').trim().toUpperCase();
 
-export const isKycVerifiedStatus = (status?: string | null): boolean =>
-  normalizeKycStatus(status) === 'VERIFIED';
+export const isKycVerifiedStatus = (status?: string | null): boolean => {
+  const norm = normalizeKycStatus(status);
+  return norm === 'VERIFIED' || norm === 'APPROVED';
+};
 
 export const deriveKycDisplayStatus = (params: {
   kycStatus?: string | null;
@@ -12,7 +14,7 @@ export const deriveKycDisplayStatus = (params: {
 }): KycDisplayStatus => {
   const normalizedStatus = normalizeKycStatus(params.kycStatus);
 
-  if (normalizedStatus === 'VERIFIED') {
+  if (normalizedStatus === 'VERIFIED' || normalizedStatus === 'APPROVED') {
     return 'VERIFIED';
   }
 

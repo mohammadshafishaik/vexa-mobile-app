@@ -18,7 +18,7 @@ const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM_NAME = process.env.EMAIL_FROM_NAME || RESEND_FROM_NAME;
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 1;
 const BASE_DELAY_MS = 500;
 const EMAILS_PER_SECOND = 100;
 
@@ -34,6 +34,9 @@ if (!RESEND_API_KEY && SMTP_USER && SMTP_PASS) {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
   });
 }
 

@@ -167,7 +167,7 @@ const ProviderDashboardScreen: React.FC = () => {
             ['COMPLETED', 'PAID'].includes(j.status)
         );
         const totalEarned = myCompletedJobs.reduce(
-          (sum, j) => sum + (j.revisedPrice ?? j.originalPrice), 0
+          (sum, j) => sum + (Number(j.revisedPrice ?? j.originalPrice) || 0), 0
         );
 
         setStats({
