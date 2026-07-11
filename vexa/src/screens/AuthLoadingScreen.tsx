@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -11,7 +11,6 @@ import Animated, {
   Easing,
   runOnJS,
   interpolate,
-  interpolateColor,
   SharedValue,
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
@@ -48,10 +47,10 @@ const AuthLoadingScreen: React.FC = () => {
   const screenOpacity = useSharedValue(1);
   const screenTranslateY = useSharedValue(0);
 
-  const navigateToMain = () => {
+  const navigateToMain = useCallback(() => {
     const route = user?.role === UserRole.PROVIDER ? 'ProviderMain' : 'CustomerMain';
     navigation.reset({ index: 0, routes: [{ name: route }] });
-  };
+  }, [navigation, user?.role]);
 
   useEffect(() => {
     // Connect socket during loading
@@ -148,7 +147,25 @@ const AuthLoadingScreen: React.FC = () => {
         }
       })
     );
-  }, []);
+  }, [
+    logoOpacity,
+    logoScale,
+    welcomeOpacity,
+    welcomeTranslateY,
+    statusOpacity,
+    statusTranslateY,
+    progressWidth,
+    progressShimmer,
+    ring1Scale,
+    ring1Opacity,
+    ring2Scale,
+    ring2Opacity,
+    ring3Scale,
+    ring3Opacity,
+    screenOpacity,
+    screenTranslateY,
+    navigateToMain,
+  ]);
 
   // Animated styles
   const logoAnimatedStyle = useAnimatedStyle(() => ({
@@ -174,15 +191,15 @@ const AuthLoadingScreen: React.FC = () => {
     opacity: interpolate(progressShimmer.value, [0, 0.5, 1], [0.6, 1, 0.6]),
   }));
 
-  const ringStyle = (scale: SharedValue<number>, opacity: SharedValue<number>) =>
+  const useRingStyle = (scale: SharedValue<number>, opacity: SharedValue<number>) =>
     useAnimatedStyle(() => ({
       transform: [{ scale: scale.value }],
       opacity: opacity.value,
     }));
 
-  const ring1Style = ringStyle(ring1Scale, ring1Opacity);
-  const ring2Style = ringStyle(ring2Scale, ring2Opacity);
-  const ring3Style = ringStyle(ring3Scale, ring3Opacity);
+  const ring1Style = useRingStyle(ring1Scale, ring1Opacity);
+  const ring2Style = useRingStyle(ring2Scale, ring2Opacity);
+  const ring3Style = useRingStyle(ring3Scale, ring3Opacity);
 
   const screenAnimatedStyle = useAnimatedStyle(() => ({
     opacity: screenOpacity.value,

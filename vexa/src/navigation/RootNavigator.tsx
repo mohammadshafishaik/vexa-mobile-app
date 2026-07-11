@@ -22,7 +22,6 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator: React.FC = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
-  const isHydrated = useAuthStore((s) => s.isHydrated);
   const updateJob = useJobStore((s) => s.updateJob);
 
   React.useEffect(() => {
@@ -42,7 +41,7 @@ const RootNavigator: React.FC = () => {
       // Register Push Notifications
       const registerPush = async () => {
         try {
-          const hasPermission = await NotificationService.requestPermission();
+          const hasPermission = await NotificationService.requestUserPermission();
           if (hasPermission) {
             const token = await NotificationService.getToken();
             if (token) {

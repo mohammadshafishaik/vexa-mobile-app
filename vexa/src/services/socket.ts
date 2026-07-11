@@ -143,6 +143,10 @@ export const socketService = {
     socket?.on('chat:read', callback);
   },
 
+  sendChatMessage: (data: { jobId: string; senderId: string; content: string; messageType?: string; imageUrl?: string }): void => {
+    socket?.emit('chat:sendMessage', data);
+  },
+
   // ─── Location events ────────────────────────
   onProviderLocation: (callback: (data: {
     jobId: string;

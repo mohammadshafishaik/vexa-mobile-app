@@ -449,9 +449,9 @@ const JobDetailScreen: React.FC = () => {
           <Animated.View entering={FadeInDown.delay(250).duration(400)}>
             <Text style={styles.sectionTitle}>Bids ({job.bids.length})</Text>
             <GlassCard style={styles.providerCard}>
-              {job.bids.slice(0, 3).map((bid: any) => (
+              {job.bids.filter(Boolean).slice(0, 3).map((bid: any) => (
                 <TouchableOpacity
-                  key={bid.id}
+                  key={bid?.id || Math.random().toString()}
                   style={styles.bidRow}
                   onPress={() => {
                     if (isCustomer && bid.provider?.id) {

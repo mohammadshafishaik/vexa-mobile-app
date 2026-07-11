@@ -48,8 +48,8 @@ type LiveBiddingRoute = RouteProp<CustomerStackParamList, 'LiveBidding'>;
 const LiveBiddingScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<LiveBiddingRoute>();
-  const { jobId } = route.params;
-  const bids = useJobStore((s) => s.bids);
+  const { jobId } = route.params || {};
+  const bids = useJobStore((s) => s.bids) || [];
   const setBids = useJobStore((s) => s.setBids);
   const addBid = useJobStore((s) => s.addBid);
   const updateBidInStore = useJobStore((s) => s.updateBid);
@@ -62,7 +62,7 @@ const LiveBiddingScreen: React.FC = () => {
   const isProvider = user?.role === UserRole.PROVIDER;
   const activeJob = jobDetails || selectedJob;
   const providerExistingBid = isProvider && user?.id
-    ? bids.find((bid) => bid.providerId === user.id) || null
+    ? bids.find((bid) => bid?.providerId === user.id) || null
     : null;
 
   // Provider Bid Modal State
@@ -95,6 +95,7 @@ const LiveBiddingScreen: React.FC = () => {
       let isActive = true;
 
       const loadBids = async () => {
+        if (!jobId) return;
         try {
           setIsLoading(true);
           const [response, jobResponse] = await Promise.all([
@@ -119,11 +120,13 @@ const LiveBiddingScreen: React.FC = () => {
       loadBids();
 
       // Join the Socket.IO bidding room for real-time updates
-      socketService.joinBiddingRoom(jobId);
+      if (jobId) {
+        socketService.joinBiddingRoom(jobId);
+      }
 
       // Listen for new bids arriving in real-time
       socketService.onNewBid((bid: any) => {
-        if (isActive && bid.jobId === jobId) {
+        if (isActive && bid?.jobId === jobId) {
           addBid(bid);
         }
       });
@@ -142,7 +145,9 @@ const LiveBiddingScreen: React.FC = () => {
 
       return () => {
         isActive = false;
-        socketService.leaveBiddingRoom(jobId);
+        if (jobId) {
+          socketService.leaveBiddingRoom(jobId);
+        }
         socketService.off(SOCKET_EVENTS.NEW_BID);
         socketService.off(SOCKET_EVENTS.BID_UPDATE);
       };
@@ -168,9 +173,9 @@ const LiveBiddingScreen: React.FC = () => {
     if (!activeJob) return;
 
     const competitorBids = bids
-      .filter((bid) => bid.providerId !== user?.id)
+      .filter((bid) => bid && bid.providerId !== user?.id)
       .map((bid) => bid.amount)
-      .filter((amount) => Number.isFinite(amount));
+      .filter((amount) => typeof amount === 'number' && Number.isFinite(amount));
     const currentLowestBid = competitorBids.length > 0
       ? Math.min(...competitorBids)
       : undefined;
@@ -397,9 +402,9 @@ const LiveBiddingScreen: React.FC = () => {
       </Text>
 
       <FlatList
-        data={bids}
+        data={bids.filter(Boolean)}
         renderItem={renderBidItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item?.id || Math.random().toString()}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

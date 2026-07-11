@@ -231,6 +231,77 @@ io.on('connection', (socket) => {
     socket.to(`chat:${data.jobId}`).emit('chat:typing', data);
   });
 
+  socket.on('chat:sendMessage', async (data: { jobId: string; senderId: string; content: string; messageType?: string; imageUrl?: string }) => {
+    try {
+      let room = await prisma.chatRoom.findUnique({
+        where: { jobId: data.jobId },
+        include: { members: true }
+      });
+
+      // If room doesn't exist, we could try to create it, but normally it should exist by now.
+      if (!room) {
+        const job = await prisma.serviceRequest.findUnique({
+          where: { id: data.jobId },
+          select: { customerId: true, selectedProviderId: true },
+        });
+        if (job && job.selectedProviderId) {
+          room = await prisma.chatRoom.create({
+            data: {
+              jobId: data.jobId,
+              members: {
+                createMany: {
+                  data: [
+                    { userId: job.customerId },
+                    { userId: job.selectedProviderId },
+                  ],
+                },
+              },
+            },
+            include: { members: true },
+          });
+        }
+      }
+
+      if (!room) return;
+
+      const message = await prisma.chatMessage.create({
+        data: {
+          chatRoomId: room.id,
+          senderId: data.senderId,
+          content: data.content || '',
+          messageType: (data.messageType as any) || 'TEXT',
+          mediaUrl: data.imageUrl || null,
+        },
+        include: {
+          sender: { select: { id: true, name: true, avatarUrl: true } },
+        },
+      });
+
+      const formattedMessage = {
+        id: message.id,
+        jobId: data.jobId,
+        senderId: message.senderId,
+        content: message.content,
+        messageType: message.messageType,
+        imageUrl: message.mediaUrl,
+        createdAt: message.createdAt,
+        sender: message.sender,
+      };
+
+      io.to(`chat:${data.jobId}`).emit('chat:message', formattedMessage);
+
+      const receiver = room.members.find(m => m.userId !== data.senderId);
+      if (receiver) {
+        io.to(`user:${receiver.userId}`).emit('chat:newMessage', {
+          jobId: data.jobId,
+          message: formattedMessage,
+        });
+      }
+    } catch (e) {
+      console.error('Socket chat:sendMessage error:', e);
+    }
+  });
+
   // Location updates (provider sends periodic GPS)
   socket.on('location:update', async (data: { jobId: string; latitude: number; longitude: number }) => {
     try {

@@ -159,17 +159,19 @@ const ChatScreen: React.FC = () => {
     }
 
     try {
-      const message = await chatService.sendMessage(jobId, { content: text });
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === message.id)) return prev;
-        return [...prev, message];
+      // Emit message natively via socket.io instead of REST API
+      socketService.sendChatMessage({
+        jobId,
+        senderId: user!.id,
+        content: text,
       });
-      // Scroll to bottom
+      
+      // Scroll to bottom optimistically (message will be added by socket listener)
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } catch (error) {
-      console.error('Failed to send message:', error);
+      console.error('Failed to send message via socket:', error);
       setInputText(text); // Restore text on failure
     } finally {
       setSending(false);
