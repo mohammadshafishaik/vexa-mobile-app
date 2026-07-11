@@ -12,6 +12,11 @@ export const socketService = {
     const user = useAuthStore.getState().user;
 
     if (socket?.connected) {
+      return socket;
+    }
+
+    if (socket) {
+      socket.removeAllListeners();
       socket.disconnect();
     }
 

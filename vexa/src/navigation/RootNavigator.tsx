@@ -26,6 +26,8 @@ const RootNavigator: React.FC = () => {
 
   React.useEffect(() => {
     if (isAuthenticated) {
+      socketService.connect();
+
       socketService.onJobStatusChange((data: any) => {
         if (data && data.jobId) {
           updateJob(data.jobId, { status: data.status });
@@ -53,6 +55,8 @@ const RootNavigator: React.FC = () => {
         }
       };
       registerPush();
+    } else {
+      socketService.disconnect();
     }
   }, [isAuthenticated, updateJob]);
 

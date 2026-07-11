@@ -53,13 +53,6 @@ const AuthLoadingScreen: React.FC = () => {
   }, [navigation, user?.role]);
 
   useEffect(() => {
-    // Connect socket during loading
-    try {
-      socketService.connect();
-    } catch (e) {
-      console.warn('[AuthLoading] Socket connection failed:', e);
-    }
-
     // Phase 1: Logo appears (0-600ms)
     logoOpacity.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) });
     logoScale.value = withSpring(1, { damping: 12, stiffness: 100 });
