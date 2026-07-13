@@ -62,6 +62,11 @@ jobs:
         working-directory: vexa
         run: npm ci
 
+      - name: Install Android NDK 27.0.12077973
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager --install "ndk;27.0.12077973"
+
       - name: Build Release APK
         working-directory: vexa/android
         run: |
