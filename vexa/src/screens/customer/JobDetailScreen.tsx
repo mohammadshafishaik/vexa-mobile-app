@@ -142,9 +142,7 @@ const JobDetailScreen: React.FC = () => {
     }
   };
 
-  const handleFinishWork = async () => {
-    navigation.navigate('Payment', { jobId });
-  };
+
 
   const handlePayment = () => {
     navigation.navigate('Payment', { jobId });
