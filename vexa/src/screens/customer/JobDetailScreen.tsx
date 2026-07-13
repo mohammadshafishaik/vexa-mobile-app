@@ -25,7 +25,6 @@ import {
   CheckCircle,
   Mail,
   Zap,
-  Zap,
   AlertTriangle,
   MessageCircle,
   XCircle,
